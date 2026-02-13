@@ -489,14 +489,14 @@ function drawAgents(agents, locations) {
     // Group agents by location
     const agentsByLocation = {};
 
-    agents.forEach(agent => {
-        const location = locations[agent.name];
+    Object.entries(agents).forEach(([name, agent]) => {
+        const location = agent.location;
         if (!location) return;
 
         if (!agentsByLocation[location]) {
             agentsByLocation[location] = [];
         }
-        agentsByLocation[location].push(agent.name);
+        agentsByLocation[location].push(name);
     });
 
     // Draw agents at their buildings
