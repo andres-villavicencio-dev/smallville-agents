@@ -131,8 +131,10 @@ class GenerativeAgent:
         if (datetime.now() - self.last_reflection_time).total_seconds() < 300:
             return
         
-        recent_importance_sum = self.memory_stream.get_recent_importance_sum(
-            hours=12, exclude_types=["reflection"]  # Don't count reflections toward threshold
+        # Only count importance of memories created SINCE last reflection
+        # This effectively "resets" the accumulator after each reflection
+        recent_importance_sum = self.memory_stream.get_importance_since(
+            since=self.last_reflection_time, exclude_types=["reflection"]
         )
         
         if recent_importance_sum >= IMPORTANCE_THRESHOLD:

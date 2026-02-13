@@ -15,3 +15,4 @@ simulation.log
 # IDE / tools
 .claude/
 .omc/
+simulation_stdout.log

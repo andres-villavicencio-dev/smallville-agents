@@ -279,6 +279,33 @@ class MemoryStream:
         except Exception as e:
             logger.error(f"Error updating memory access time: {e}")
     
+    def get_importance_since(self, since: datetime = None, exclude_types: List[str] = None) -> int:
+        """Get sum of importance scores for memories created since a given time."""
+        if since is None:
+            since = datetime.now() - timedelta(hours=24)
+        
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                if exclude_types:
+                    placeholders = ",".join("?" for _ in exclude_types)
+                    cursor.execute(f"""
+                        SELECT COALESCE(SUM(importance_score), 0)
+                        FROM memories 
+                        WHERE agent_name = ? AND creation_timestamp > ?
+                        AND memory_type NOT IN ({placeholders})
+                    """, (self.agent_name, since.isoformat(), *exclude_types))
+                else:
+                    cursor.execute("""
+                        SELECT COALESCE(SUM(importance_score), 0)
+                        FROM memories 
+                        WHERE agent_name = ? AND creation_timestamp > ?
+                    """, (self.agent_name, since.isoformat()))
+                return cursor.fetchone()[0]
+        except Exception as e:
+            logger.error(f"Error calculating importance since {since}: {e}")
+            return 0
+
     def get_recent_importance_sum(self, hours: int = 24, exclude_types: List[str] = None) -> int:
         """Get sum of importance scores for recent memories."""
         cutoff_time = datetime.now() - timedelta(hours=hours)
