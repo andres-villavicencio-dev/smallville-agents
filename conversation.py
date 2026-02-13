@@ -1,0 +1,383 @@
+"""Conversation system for generative agents."""
+import logging
+import asyncio
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass
+from datetime import datetime
+from memory import Memory, MemoryStream
+from llm import get_llm_client
+from personas import get_agent_persona, format_agent_description
+import config as cfg
+from prompts import (
+    CONVERSATION_INITIATION_PROMPT,
+    CONVERSATION_RESPONSE_PROMPT,
+    CONVERSATION_TOPIC_PROMPT,
+    CONVERSATION_ENDING_PROMPT
+)
+
+def _get_committee_conv_imports():
+    from committee import should_converse as committee_should_converse, generate_dialogue
+    return committee_should_converse, generate_dialogue
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class ConversationTurn:
+    """A single turn in a conversation."""
+    speaker: str
+    message: str
+    timestamp: datetime
+    
+class Conversation:
+    """Manages a conversation between two agents."""
+    
+    def __init__(self, agent1: str, agent2: str, location: str):
+        self.agent1 = agent1
+        self.agent2 = agent2
+        self.location = location
+        self.turns: List[ConversationTurn] = []
+        self.start_time = datetime.now()
+        self.active = True
+        self.max_turns = 8
+    
+    def add_turn(self, speaker: str, message: str):
+        """Add a turn to the conversation."""
+        turn = ConversationTurn(
+            speaker=speaker,
+            message=message,
+            timestamp=datetime.now()
+        )
+        self.turns.append(turn)
+        logger.info(f"Conversation: {speaker}: {message}")
+    
+    def get_history_text(self) -> str:
+        """Get conversation history as formatted text."""
+        history = []
+        for turn in self.turns:
+            history.append(f"{turn.speaker}: {turn.message}")
+        return "\n".join(history)
+    
+    def should_end(self) -> bool:
+        """Check if conversation should end."""
+        return len(self.turns) >= self.max_turns or not self.active
+    
+    def get_participants(self) -> Tuple[str, str]:
+        """Get the two participants."""
+        return self.agent1, self.agent2
+
+class ConversationManager:
+    """Manages conversations between agents."""
+    
+    def __init__(self):
+        self.active_conversations: Dict[Tuple[str, str], Conversation] = {}
+        self.conversation_history: List[Conversation] = []
+    
+    def get_conversation_key(self, agent1: str, agent2: str) -> Tuple[str, str]:
+        """Get a consistent key for agent pair."""
+        return tuple(sorted([agent1, agent2]))
+    
+    def has_active_conversation(self, agent1: str, agent2: str) -> bool:
+        """Check if agents have an active conversation."""
+        key = self.get_conversation_key(agent1, agent2)
+        return key in self.active_conversations
+    
+    def get_active_conversation(self, agent1: str, agent2: str) -> Optional[Conversation]:
+        """Get active conversation between agents."""
+        key = self.get_conversation_key(agent1, agent2)
+        return self.active_conversations.get(key)
+    
+    async def should_initiate_conversation(self, initiator: str, target: str, 
+                                         context: str, memory_stream: MemoryStream) -> bool:
+        """Determine if initiator should start conversation with target."""
+        try:
+            # Get relevant memories for initiator
+            query = f"conversation with {target} or {target} or talking"
+            relevant_memories = memory_stream.retrieve_memories(query, top_k=5)
+            memory_descriptions = [mem[0].description for mem in relevant_memories]
+
+            # ── Committee mode: Social + Emotional + Judge ──
+            if cfg.USE_COMMITTEE:
+                committee_should_converse, _ = _get_committee_conv_imports()
+                situation = (
+                    f"{initiator} and {target} are both at the same location. {context}\n"
+                    f"Recent memories: {'; '.join(memory_descriptions[:3]) if memory_descriptions else 'None'}"
+                )
+                should_talk = await committee_should_converse(initiator, situation)
+                logger.debug(f"Conversation initiation (committee): {initiator} -> {target}: {'YES' if should_talk else 'NO'}")
+                return should_talk
+
+            # ── Single-model mode ──
+            llm = await get_llm_client()
+            prompt = CONVERSATION_INITIATION_PROMPT.format(
+                agent_name=initiator,
+                other_agent=target,
+                context=context,
+                agent_memories="\n".join(memory_descriptions) if memory_descriptions else "No recent relevant memories"
+            )
+            
+            response = await llm.generate(prompt, temperature=0.6, max_tokens=10, task="conversation")
+            should_talk = response.strip().upper() == "YES"
+            
+            logger.debug(f"Conversation initiation: {initiator} -> {target}: {'YES' if should_talk else 'NO'}")
+            return should_talk
+            
+        except Exception as e:
+            logger.error(f"Error determining conversation initiation: {e}")
+            return False
+    
+    async def start_conversation(self, agent1: str, agent2: str, 
+                               location: str, memory_streams: Dict[str, MemoryStream]) -> Optional[Conversation]:
+        """Start a new conversation between two agents."""
+        key = self.get_conversation_key(agent1, agent2)
+        
+        if key in self.active_conversations:
+            logger.warning(f"Conversation already active between {agent1} and {agent2}")
+            return self.active_conversations[key]
+        
+        try:
+            # Create new conversation
+            conversation = Conversation(agent1, agent2, location)
+            
+            # Generate opening message from agent1
+            opening_message = await self._generate_opening_message(
+                agent1, agent2, location, memory_streams[agent1]
+            )
+            
+            if opening_message:
+                conversation.add_turn(agent1, opening_message)
+                self.active_conversations[key] = conversation
+                
+                # Add conversation start to both agents' memories
+                await self._add_conversation_memory(
+                    agent1, f"Started conversation with {agent2} at {location}",
+                    memory_streams[agent1], location
+                )
+                await self._add_conversation_memory(
+                    agent2, f"{agent1} started talking to me at {location}",
+                    memory_streams[agent2], location
+                )
+                
+                logger.info(f"Started conversation between {agent1} and {agent2} at {location}")
+                return conversation
+        
+        except Exception as e:
+            logger.error(f"Error starting conversation: {e}")
+        
+        return None
+    
+    async def _generate_opening_message(self, speaker: str, target: str, 
+                                       location: str, memory_stream: MemoryStream) -> str:
+        """Generate an opening conversation message."""
+        try:
+            # Get relevant memories
+            query = f"recent activities plans {target}"
+            relevant_memories = memory_stream.retrieve_memories(query, top_k=5)
+            memory_descriptions = [mem[0].description for mem in relevant_memories[-3:]]
+            
+            # Get speaker's persona
+            persona = get_agent_persona(speaker)
+            personality = persona.get("personality", "friendly")
+            
+            llm = await get_llm_client()
+            
+            # First, get topic suggestions
+            topic_prompt = CONVERSATION_TOPIC_PROMPT.format(
+                agent_name=speaker,
+                other_agent=target,
+                agent_memories="\n".join(memory_descriptions) if memory_descriptions else "No specific memories",
+                context=f"They are both at {location}"
+            )
+            
+            topics = await llm.generate(topic_prompt, temperature=0.8, max_tokens=100, task="conversation")
+            
+            # Then generate opening based on topics
+            opening_prompt = f"""You are {speaker} starting a conversation with {target} at {location}.
+
+Your personality: {personality}
+
+Topics you might discuss:
+{topics}
+
+Generate a natural, brief opening message (1-2 sentences) that {speaker} would say to start the conversation. Consider your personality and current situation."""
+            
+            opening = await llm.generate(opening_prompt, temperature=0.9, max_tokens=80, task="conversation")
+            return opening.strip()
+            
+        except Exception as e:
+            logger.error(f"Error generating opening message: {e}")
+            return f"Hello {target}!"
+    
+    async def continue_conversation(self, conversation: Conversation, 
+                                  memory_streams: Dict[str, MemoryStream]) -> bool:
+        """Continue an active conversation with the next turn."""
+        if not conversation.active or conversation.should_end():
+            return False
+        
+        try:
+            # Determine who should speak next
+            if not conversation.turns:
+                next_speaker = conversation.agent1
+            else:
+                last_speaker = conversation.turns[-1].speaker
+                next_speaker = conversation.agent2 if last_speaker == conversation.agent1 else conversation.agent1
+            
+            other_agent = conversation.agent1 if next_speaker == conversation.agent2 else conversation.agent2
+            
+            # Generate response
+            response = await self._generate_conversation_response(
+                next_speaker, other_agent, conversation, memory_streams[next_speaker]
+            )
+            
+            if response:
+                conversation.add_turn(next_speaker, response)
+                
+                # Add to both agents' memories
+                await self._add_conversation_memory(
+                    next_speaker, f"Said to {other_agent}: '{response}'",
+                    memory_streams[next_speaker], conversation.location
+                )
+                await self._add_conversation_memory(
+                    other_agent, f"{next_speaker} said: '{response}'",
+                    memory_streams[other_agent], conversation.location
+                )
+                
+                return True
+        
+        except Exception as e:
+            logger.error(f"Error continuing conversation: {e}")
+        
+        return False
+    
+    async def _generate_conversation_response(self, speaker: str, other_agent: str,
+                                            conversation: Conversation,
+                                            memory_stream: MemoryStream) -> str:
+        """Generate a conversation response."""
+        try:
+            # Get relevant memories
+            query = f"conversation with {other_agent} or {other_agent}"
+            relevant_memories = memory_stream.retrieve_memories(query, top_k=8)
+            memory_descriptions = [mem[0].description for mem in relevant_memories]
+            
+            # Get persona info
+            persona = get_agent_persona(speaker)
+            personality = persona.get("personality", "friendly")
+
+            # ── Committee mode: Memory + Emotional + Dialogue pipeline ──
+            if cfg.USE_COMMITTEE:
+                _, generate_dialogue = _get_committee_conv_imports()
+                situation = (
+                    f"{speaker} (personality: {personality}) is talking to {other_agent} "
+                    f"at {conversation.location}.\n"
+                    f"Conversation so far:\n{conversation.get_history_text()}\n"
+                    f"Generate {speaker}'s next line of dialogue."
+                )
+                memories_text = "\n".join(f"- {m}" for m in memory_descriptions[-5:]) if memory_descriptions else "No relevant memories"
+                response = await generate_dialogue(speaker, situation, memories=memories_text)
+                return response.strip() if response else "I see."
+
+            # ── Single-model mode ──
+            description = format_agent_description(speaker)
+            
+            llm = await get_llm_client()
+            prompt = CONVERSATION_RESPONSE_PROMPT.format(
+                agent_name=speaker,
+                other_agent=other_agent,
+                conversation_history=conversation.get_history_text(),
+                agent_memories="\n".join(memory_descriptions[-5:]) if memory_descriptions else "No relevant memories",
+                agent_personality=personality
+            )
+            
+            response = await llm.generate(prompt, temperature=0.9, max_tokens=100, task="conversation")
+            return response.strip()
+            
+        except Exception as e:
+            logger.error(f"Error generating conversation response: {e}")
+            return "I see."
+    
+    async def should_end_conversation(self, conversation: Conversation) -> bool:
+        """Determine if a conversation should end."""
+        if len(conversation.turns) < 2:
+            return False
+        
+        if len(conversation.turns) >= conversation.max_turns:
+            return True
+        
+        try:
+            llm = await get_llm_client()
+            prompt = CONVERSATION_ENDING_PROMPT.format(
+                agent1=conversation.agent1,
+                agent2=conversation.agent2,
+                conversation_history=conversation.get_history_text()
+            )
+            
+            response = await llm.generate(prompt, temperature=0.6, max_tokens=10, task="conversation")
+            return response.strip().upper() == "YES"
+            
+        except Exception as e:
+            logger.error(f"Error determining conversation ending: {e}")
+            return len(conversation.turns) >= 6  # Default fallback
+    
+    async def end_conversation(self, conversation: Conversation,
+                              memory_streams: Dict[str, MemoryStream]):
+        """End an active conversation."""
+        conversation.active = False
+        
+        # Remove from active conversations
+        key = self.get_conversation_key(conversation.agent1, conversation.agent2)
+        if key in self.active_conversations:
+            del self.active_conversations[key]
+        
+        # Add to history
+        self.conversation_history.append(conversation)
+        
+        # Add conversation summary to both agents' memories
+        summary = f"Had conversation with {conversation.agent2}" if conversation.agent1 else f"Had conversation with {conversation.agent1}"
+        
+        await self._add_conversation_memory(
+            conversation.agent1, f"Finished conversation with {conversation.agent2}",
+            memory_streams[conversation.agent1], conversation.location
+        )
+        await self._add_conversation_memory(
+            conversation.agent2, f"Finished conversation with {conversation.agent1}",
+            memory_streams[conversation.agent2], conversation.location
+        )
+        
+        logger.info(f"Ended conversation between {conversation.agent1} and {conversation.agent2}")
+    
+    async def _add_conversation_memory(self, agent_name: str, description: str,
+                                     memory_stream: MemoryStream, location: str):
+        """Add a conversation memory to an agent's memory stream."""
+        memory = Memory(
+            agent_name=agent_name,
+            description=description,
+            memory_type="observation",
+            importance_score=6,  # Conversations are moderately important
+            location=location
+        )
+        memory_stream.add_memory(memory)
+    
+    async def update_conversations(self, memory_streams: Dict[str, MemoryStream]):
+        """Update all active conversations."""
+        conversations_to_end = []
+        
+        for conversation in list(self.active_conversations.values()):
+            if conversation.active:
+                # Continue conversation
+                continued = await self.continue_conversation(conversation, memory_streams)
+                
+                if not continued or await self.should_end_conversation(conversation):
+                    conversations_to_end.append(conversation)
+        
+        # End conversations that should end
+        for conversation in conversations_to_end:
+            await self.end_conversation(conversation, memory_streams)
+    
+    def get_active_conversations_summary(self) -> List[str]:
+        """Get summary of all active conversations."""
+        summaries = []
+        for conversation in self.active_conversations.values():
+            location = conversation.location
+            participants = f"{conversation.agent1} and {conversation.agent2}"
+            turn_count = len(conversation.turns)
+            summaries.append(f"{participants} talking at {location} ({turn_count} turns)")
+        return summaries

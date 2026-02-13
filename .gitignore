@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+
+# Runtime data
+db/
+saves/
+simulation.log
+
+# Testing
+.pytest_cache/
+
+# IDE / tools
+.claude/
+.omc/

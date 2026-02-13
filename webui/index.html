@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smallville Simulation Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header Bar -->
+        <header class="header">
+            <div class="header-left">
+                <h1 class="title">SMALLVILLE</h1>
+                <span class="sim-time" id="sim-time">Feb 13 2023 08:00</span>
+            </div>
+            <div class="header-center">
+                <div class="speed-controls">
+                    <button class="speed-btn" id="speed-decrease">◀</button>
+                    <span class="speed-display" id="speed-display">10x</span>
+                    <button class="speed-btn" id="speed-increase">▶</button>
+                </div>
+            </div>
+            <div class="header-right">
+                <button class="control-btn" id="pause-btn">Pause</button>
+                <button class="control-btn" id="save-btn">Save</button>
+                <div class="connection-status">
+                    <span class="status-dot" id="connection-status"></span>
+                    <span class="status-text">Connected</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Map Container -->
+            <section class="map-section">
+                <div class="panel" id="map-container">
+                    <canvas id="map-canvas"></canvas>
+                    <div class="map-tooltip" id="map-tooltip"></div>
+                </div>
+            </section>
+
+            <!-- Agent Detail Panel -->
+            <aside class="agent-section">
+                <div class="panel" id="agent-panel">
+                    <div id="agent-panel-placeholder" class="panel-placeholder">
+                        <div class="placeholder-icon">◈</div>
+                        <p>Click an agent on the map to view details</p>
+                    </div>
+
+                    <div id="agent-detail" class="agent-detail" style="display: none;">
+                        <h2 id="agent-name" class="agent-name"></h2>
+
+                        <div class="detail-section" id="agent-meta"></div>
+
+                        <div class="detail-section">
+                            <h3 class="section-title">Personality</h3>
+                            <div id="agent-personality" class="personality-text"></div>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3 class="section-title">Current Activity</h3>
+                            <div id="agent-activity" class="activity-text"></div>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3 class="section-title">Daily Schedule</h3>
+                            <ul id="agent-schedule" class="schedule-list"></ul>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3 class="section-title">Relationships</h3>
+                            <div id="agent-relationships" class="relationships-list"></div>
+                        </div>
+
+                        <div class="detail-section">
+                            <h3 class="section-title">Memory Stream</h3>
+                            <div class="memory-filters">
+                                <button class="filter-tab active" data-filter="all">All</button>
+                                <button class="filter-tab" data-filter="observation">Observations</button>
+                                <button class="filter-tab" data-filter="reflection">Reflections</button>
+                                <button class="filter-tab" data-filter="plan">Plans</button>
+                            </div>
+                            <div id="agent-memories" class="memories-container"></div>
+                            <button class="load-more-btn" id="load-more-memories">Load More</button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Bottom Panels -->
+        <footer class="bottom-panels">
+            <!-- Activity Feed -->
+            <section class="bottom-panel">
+                <div class="panel">
+                    <h3 class="panel-title">Activity Feed</h3>
+                    <div id="events-feed" class="events-feed"></div>
+                </div>
+            </section>
+
+            <!-- Conversations -->
+            <section class="bottom-panel">
+                <div class="panel">
+                    <h3 class="panel-title">Conversations</h3>
+                    <div id="conversations-panel" class="conversations-panel">
+                        <div class="conversations-active">
+                            <h4 class="subsection-title">Active Now</h4>
+                            <div id="active-conversations"></div>
+                        </div>
+                        <div class="conversations-recent">
+                            <h4 class="subsection-title">Recent</h4>
+                            <div id="recent-conversations"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Stats -->
+            <section class="bottom-panel">
+                <div class="panel">
+                    <h3 class="panel-title">Statistics</h3>
+                    <div id="stats-panel" class="stats-panel">
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-tick">0</div>
+                            <div class="stat-label">Ticks</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-memories">0</div>
+                            <div class="stat-label">Memories</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-observations">0</div>
+                            <div class="stat-label">Observations</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-reflections">0</div>
+                            <div class="stat-label">Reflections</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-conversations">0</div>
+                            <div class="stat-label">Conversations</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-llm-calls">0</div>
+                            <div class="stat-label">LLM Calls</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </footer>
+
+        <!-- Credits -->
+        <div class="credits">
+            Generative Agents Simulation — Stanford arXiv:2304.03442
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/map.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
