@@ -5,6 +5,7 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 from memory import Memory, MemoryStream
+from skillbank import SkillBank, distill_conversation_skill
 from llm import get_llm_client
 from personas import get_agent_persona, format_agent_description
 import config as cfg
@@ -98,6 +99,12 @@ class ConversationManager:
             # ── Committee mode: Social + Emotional + Judge ──
             if cfg.USE_COMMITTEE:
                 committee_should_converse, _ = _get_committee_conv_imports()
+                # Retrieve relevant social skills if skill_bank available
+                skills_text = ""
+                try:
+                    from agent import GenerativeAgent  # avoid circular at top level
+                except ImportError:
+                    pass
                 situation = (
                     f"{initiator} and {target} are both at the same location. {context}\n"
                     f"Recent memories: {'; '.join(memory_descriptions[:3]) if memory_descriptions else 'None'}"
@@ -318,8 +325,9 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
             return len(conversation.turns) >= 6  # Default fallback
     
     async def end_conversation(self, conversation: Conversation,
-                              memory_streams: Dict[str, MemoryStream]):
-        """End an active conversation."""
+                              memory_streams: Dict[str, MemoryStream],
+                              skill_banks: Optional[Dict[str, SkillBank]] = None):
+        """End an active conversation and distill skills from it."""
         conversation.active = False
         
         # Remove from active conversations
@@ -331,8 +339,6 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
         self.conversation_history.append(conversation)
         
         # Add conversation summary to both agents' memories
-        summary = f"Had conversation with {conversation.agent2}" if conversation.agent1 else f"Had conversation with {conversation.agent1}"
-        
         await self._add_conversation_memory(
             conversation.agent1, f"Finished conversation with {conversation.agent2}",
             memory_streams[conversation.agent1], conversation.location
@@ -343,6 +349,30 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
         )
         
         logger.info(f"Ended conversation between {conversation.agent1} and {conversation.agent2}")
+        
+        # Distill skills from the conversation for both participants
+        if skill_banks:
+            outcome = "success" if len(conversation.turns) >= 3 else "failure"
+            conv_text = conversation.get_history_text()
+            for agent_name in [conversation.agent1, conversation.agent2]:
+                if agent_name in skill_banks:
+                    try:
+                        import asyncio
+                        asyncio.create_task(
+                            self._distill_and_store_skill(
+                                skill_banks[agent_name], agent_name,
+                                conv_text, outcome, conversation.location
+                            )
+                        )
+                    except Exception as e:
+                        logger.debug(f"Conversation skill distillation failed: {e}")
+
+    async def _distill_and_store_skill(self, skill_bank: SkillBank, agent_name: str,
+                                       conv_text: str, outcome: str, location: str):
+        """Background: distill a conversation into a skill and store it."""
+        skill = await distill_conversation_skill(agent_name, conv_text, outcome, location)
+        if skill:
+            skill_bank.add_skill(skill)
     
     async def _add_conversation_memory(self, agent_name: str, description: str,
                                      memory_stream: MemoryStream, location: str):
@@ -356,7 +386,8 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
         )
         memory_stream.add_memory(memory)
     
-    async def update_conversations(self, memory_streams: Dict[str, MemoryStream]):
+    async def update_conversations(self, memory_streams: Dict[str, MemoryStream],
+                                   skill_banks: Optional[Dict[str, SkillBank]] = None):
         """Update all active conversations."""
         conversations_to_end = []
         
@@ -370,7 +401,7 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
         
         # End conversations that should end
         for conversation in conversations_to_end:
-            await self.end_conversation(conversation, memory_streams)
+            await self.end_conversation(conversation, memory_streams, skill_banks)
     
     def get_active_conversations_summary(self) -> List[str]:
         """Get summary of all active conversations."""

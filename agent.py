@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
 from memory import Memory, MemoryStream
+from skillbank import SkillBank, distill_reflection_skill
 from llm import get_llm_client
 from personas import get_agent_persona, format_agent_description
 from config import IMPORTANCE_THRESHOLD, MAX_RECENT_MEMORIES, ACTION_DURATION_RANGE
@@ -64,6 +65,7 @@ class GenerativeAgent:
         self.name = name
         self.persona = get_agent_persona(name)
         self.memory_stream = MemoryStream(name, db_path)
+        self.skill_bank = SkillBank(name, db_path)
         self.daily_plan: List[PlanItem] = []
         self.current_plan_item: Optional[PlanItem] = None
         self.current_location = ""
@@ -177,6 +179,10 @@ class GenerativeAgent:
                     self.last_reflection_time = datetime.now()
                     self.reflection_count += 1
                     logger.info(f"{self.name} reflected (committee): {reflection_text}")
+
+                    # Distill skill from reflection (fire-and-forget, don't block)
+                    asyncio.create_task(self._distill_skill_from_reflection(reflection_text))
+
                     return [reflection_memory]
                 return []
 
@@ -493,6 +499,21 @@ class GenerativeAgent:
         
         return None
     
+    async def _distill_skill_from_reflection(self, reflection_text: str):
+        """Background task: distill a skill from a reflection."""
+        try:
+            context = f"at {self.current_location}, activity: {self.current_plan_item.description if self.current_plan_item else 'idle'}"
+            skill = await distill_reflection_skill(self.name, reflection_text, context)
+            if skill:
+                self.skill_bank.add_skill(skill)
+        except Exception as e:
+            logger.debug(f"Skill distillation failed (non-critical): {e}")
+
+    def get_relevant_skills_text(self, context: str) -> str:
+        """Retrieve relevant skills formatted for LLM prompts."""
+        skills = self.skill_bank.retrieve_relevant_skills(context, top_k=3)
+        return self.skill_bank.format_skills_for_prompt(skills)
+
     def get_status_summary(self) -> str:
         """Get a summary of the agent's current status."""
         status = f"{self.name} ({self.persona.get('occupation', 'Unknown')})"

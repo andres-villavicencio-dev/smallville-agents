@@ -236,8 +236,10 @@ class SmallvilleSimulation:
                         busiest_loc = max(self.display.location_populations.items(), key=lambda x: len(x[1]), default=("", []))
                         if busiest_loc[1]:
                             busiest = f" | Busiest: {busiest_loc[0]} ({len(busiest_loc[1])})"
+                    total_skills = sum(a.skill_bank.get_stats()["total"] for a in self.agents.values())
+                    skills_str = f" | Skills: {total_skills}" if total_skills else ""
                     self.display.add_event(
-                        f"⏱ Tick {self.tick_count} | Memories: {self.stats.get('total_memories', 0)} | Convos: {active_convos} active{busiest}"
+                        f"⏱ Tick {self.tick_count} | Memories: {self.stats.get('total_memories', 0)} | Convos: {active_convos} active{busiest}{skills_str}"
                     )
                 
                 # Run one simulation step
@@ -387,7 +389,11 @@ class SmallvilleSimulation:
                 key = (conv.agent1, conv.agent2)
                 turn_counts[key] = len(conv.turns)
             
-            await self.conversation_manager.update_conversations(memory_streams)
+            skill_banks = {
+                name: agent.skill_bank
+                for name, agent in self.agents.items()
+            }
+            await self.conversation_manager.update_conversations(memory_streams, skill_banks)
             
             # Log any new conversation lines to display
             for conv in self.conversation_manager.active_conversations.values():
