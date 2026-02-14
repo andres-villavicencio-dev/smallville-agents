@@ -217,7 +217,7 @@ AGENT_PERSONAS = {
         },
         "daily_routine": ["open pub", "serve drinks", "quick lunch at Hobbs Cafe", "chat with customers", "manage business"],
         "goals": ["maintain friendly atmosphere", "support local community", "grow relationship with Sarah"],
-        "home_location": "Above pub",
+        "home_location": "The Rose and Crown Pub",
         "work_location": "The Rose and Crown Pub",
         "lunch_location": "Hobbs Cafe",
         "errand_locations": ["Hobbs Cafe", "Harvey Oak Supply Store"]
