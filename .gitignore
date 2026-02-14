@@ -16,3 +16,5 @@ simulation.log
 .claude/
 .omc/
 simulation_stdout.log
+broadcaster.log
+.broadcaster_state.json

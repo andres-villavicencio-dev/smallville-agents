@@ -110,7 +110,7 @@ class ConversationManager:
                     f"Recent memories: {'; '.join(memory_descriptions[:3]) if memory_descriptions else 'None'}"
                 )
                 should_talk = await committee_should_converse(initiator, situation)
-                logger.debug(f"Conversation initiation (committee): {initiator} -> {target}: {'YES' if should_talk else 'NO'}")
+                logger.info(f"Conversation check (committee): {initiator} -> {target}: {'YES' if should_talk else 'NO'}")
                 return should_talk
 
             # ── Single-model mode ──

@@ -90,9 +90,10 @@ EXPERTS = {
         name="Dialogue",
         model=os.getenv("COMMITTEE_MODEL_DIALOGUE", "llama3.2:3b"),
         role=(
-            "You are a dialogue expert. You generate natural, character-consistent conversation. "
-            "Given context about a person and situation, generate what they would actually say. "
-            "Keep it natural and brief — 1-2 sentences of dialogue only."
+            "You are a dialogue writer. Output ONLY the character's spoken words — nothing else. "
+            "No narration, no stage directions, no analysis, no personality descriptions, no predictions. "
+            "Do not start with the character's name. Do not explain why they would say it. "
+            "Just write 1-2 sentences of natural dialogue as if you ARE the character speaking."
         ),
         temperature=0.9,
         max_tokens=100,
@@ -118,7 +119,7 @@ EXPERTS = {
 PIPELINES = {
     "decide_action": ["temporal", "spatial", "social", "memory", "emotional", "judge"],
     "conversation_response": ["memory", "emotional", "dialogue"],
-    "should_converse": ["social", "emotional", "judge"],
+    "should_converse": ["social"],
     "plan_day": ["temporal", "memory", "spatial", "judge"],
     "reflect": ["memory", "emotional", "judge"],
 }
@@ -310,14 +311,55 @@ async def generate_dialogue(agent_name: str, situation: str, memories: str = "")
     extra = {}
     if memories:
         extra["memory"] = memories
-    return await committee.consult("conversation_response", situation, agent_name, extra)
+    raw = await committee.consult("conversation_response", situation, agent_name, extra)
+    return _clean_dialogue(raw, agent_name)
+
+
+def _clean_dialogue(text: str, agent_name: str) -> str:
+    """Strip meta-commentary leaked by the dialogue expert, keeping only spoken words."""
+    if not text:
+        return "I see."
+    import re
+    # Remove common meta prefixes the model leaks
+    meta_patterns = [
+        rf"^{re.escape(agent_name)}(?:'s)?\s*(?:next line of dialogue|response|would (?:say|respond))[^\"]*?[,:\n]+\s*",
+        r"^(?:Based on|Given|Considering|Here is|The response|I predict)[^\"]*?[:\n]+\s*",
+        r"^(?:This (?:response|line|dialogue))\s.*$",
+    ]
+    cleaned = text.strip()
+    for pattern in meta_patterns:
+        cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE | re.MULTILINE).strip()
+    # Strip trailing meta-commentary after the actual dialogue
+    # Look for sentences starting with "This response/line/aligns/reflects"
+    cleaned = re.split(r"\n\s*(?:This (?:response|line|dialogue)|This aligns|This reflects)", cleaned, flags=re.IGNORECASE)[0].strip()
+    # Remove wrapping quotes if present
+    if cleaned.startswith('"') and cleaned.endswith('"'):
+        cleaned = cleaned[1:-1].strip()
+    return cleaned if cleaned else "I see."
 
 
 async def should_converse(agent_name: str, situation: str) -> bool:
     """Decide whether an agent should initiate conversation."""
     committee = get_committee()
-    result = await committee.consult("should_converse", situation, agent_name)
-    return "yes" in result.lower()
+    # Use a single fast Social expert call with explicit YES/NO instruction
+    expert = EXPERTS["social"]
+    prompt = (
+        f"Agent: {agent_name}\n"
+        f"Situation: {situation}\n\n"
+        f"Should {agent_name} initiate a conversation with the other person? "
+        f"Consider: Do they have a reason to talk? Are they at the same location? "
+        f"Is it socially natural for people in this situation to chat?\n\n"
+        f"Respond with YES or NO on the first line, then a brief reason."
+    )
+    try:
+        from llm import _notify_llm_status
+    except ImportError:
+        _notify_llm_status = lambda a, t, m: None
+    _notify_llm_status(agent_name, "should_converse", expert.model)
+    result = await committee._call_model(expert, prompt)
+    should = result.strip().upper().startswith("YES") if result else False
+    logger.info(f"[should_converse] {agent_name}: {'YES' if should else 'NO'} — {result[:100] if result else 'empty'}")
+    return should
 
 
 async def plan_day(agent_name: str, situation: str, memories: str = "") -> str:

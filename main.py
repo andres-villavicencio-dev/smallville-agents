@@ -352,6 +352,7 @@ class SmallvilleSimulation:
                             context = f"Both at {location_name}"
                             agent1_memory = self.agents[agent1].memory_stream
                             
+                            logger.info(f"Checking conversation: {agent1} <-> {agent2} at {location_name}")
                             should_talk = await self.conversation_manager.should_initiate_conversation(
                                 agent1, agent2, context, agent1_memory
                             )
