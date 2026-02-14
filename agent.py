@@ -84,12 +84,18 @@ class GenerativeAgent:
             self.memory_stream.add_memory(memory)
             logger.info(f"Added special memory for {self.name}: {special_memory}")
     
+    def score_importance_rule_based(self, observation: str) -> int:
+        """Rule-based importance scoring. No LLM call."""
+        text = observation.lower()
+        for score, keywords in cfg.ROUTINE_IMPORTANCE_KEYWORDS.items():
+            if any(w in text for w in keywords):
+                return score
+        return 3
+
     async def observe(self, observation: str, location: str = "") -> Memory:
-        """Process an observation and add it to memory with importance scoring."""
+        """Process an observation and add it to memory with rule-based importance scoring."""
         try:
-            # Score importance using LLM (single-model even in committee mode — fast/cheap)
-            llm = await get_llm_client()
-            importance_score = await llm.score_importance(observation, agent_name=self.name)
+            importance_score = self.score_importance_rule_based(observation)
             
             # Create and store memory
             memory = Memory(
@@ -123,8 +129,8 @@ class GenerativeAgent:
     
     async def _check_reflection_trigger(self):
         """Check if reflection should be triggered based on recent importance."""
-        # Cooldown: don't reflect if we reflected in the last 5 minutes (real time)
-        if (datetime.now() - self.last_reflection_time).total_seconds() < 300:
+        # Cooldown: don't reflect if we reflected in the last 10 minutes (real time)
+        if (datetime.now() - self.last_reflection_time).total_seconds() < 600:
             return
         
         # Only count importance of memories created SINCE last reflection
@@ -169,11 +175,11 @@ class GenerativeAgent:
                 self.last_reflection_time = datetime.now()
                 self.reflection_count += 1
 
-                # Distill skill from reflection (fire-and-forget, don't block)
-                for reflection in reflections:
-                    asyncio.create_task(
-                        self._distill_skill_from_reflection(reflection.description)
-                    )
+                # Skill distillation disabled for performance
+                # for reflection in reflections:
+                #     asyncio.create_task(
+                #         self._distill_skill_from_reflection(reflection.description)
+                #     )
 
             return reflections
 

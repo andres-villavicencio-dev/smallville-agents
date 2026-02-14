@@ -43,7 +43,7 @@ ACTION_DURATION_RANGE = (5, 15)  # Minutes for atomic actions
 
 # Simulation Configuration
 DEFAULT_SIMULATION_SPEED = 10    # Game seconds per real second
-TICK_DURATION_SECONDS = 10       # Each simulation tick = 10 game seconds
+TICK_DURATION_SECONDS = 120      # Each simulation tick = 2 min game time (720 ticks/day)
 DEFAULT_SIM_DAYS = 2            # Default simulation length
 DEFAULT_NUM_AGENTS = 25          # Number of agents to simulate (5-25)
 
@@ -51,6 +51,19 @@ DEFAULT_NUM_AGENTS = 25          # Number of agents to simulate (5-25)
 CONVERSATION_PROBABILITY = 0.3   # Chance of initiating conversation when relevant
 MAX_CONVERSATION_TURNS = 6       # Maximum turns per conversation
 CONVERSATION_RELEVANCE_THRESHOLD = 0.5  # Minimum relevance to initiate
+
+# Performance tuning
+AGENT_BATCH_SIZE = 6             # Concurrent agent processing
+LLM_SEMAPHORE_LIMIT = 2          # Max concurrent Ollama requests
+CONVERSATION_CHECK_INTERVAL = 3  # Only check for new conversations every N ticks
+
+# Rule-based importance keywords (avoids LLM call per observation)
+ROUTINE_IMPORTANCE_KEYWORDS = {
+    8: ['party', 'valentine', 'emergency', 'fight', 'love', 'died', 'wedding', 'fired'],
+    6: ['invite', 'plan', 'meeting', 'announce', 'new', 'secret'],
+    4: ['talk', 'chat', 'discuss', 'mention', 'said'],
+    2: ['walk', 'sit', 'stand', 'working', 'eating', 'reading'],
+}
 
 # Environment Configuration
 SMALLVILLE_LOCATIONS = {

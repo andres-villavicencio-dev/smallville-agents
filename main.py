@@ -110,7 +110,7 @@ class SmallvilleSimulation:
 
     def set_speed(self, speed: int):
         """Set simulation speed."""
-        self.simulation_speed = max(1, min(100, speed))
+        self.simulation_speed = max(1, speed)
         logger.info(f"Simulation speed set to {self.simulation_speed}x")
 
     async def save_state(self):
@@ -299,26 +299,31 @@ class SmallvilleSimulation:
             if not self.running:
                 return
 
-            # 2. Generate environmental observations (sample a few agents per tick, not all)
-            import random
-            agents_to_observe = random.sample(
-                list(self.agents.values()),
-                min(5, len(self.agents))
-            )
-            observation_tasks = []
-            for agent in agents_to_observe:
-                observations = self.environment.observe_environment(agent.name)
-                for obs in observations:
-                    observation_tasks.append(agent.observe(obs, agent.current_location))
+            # 2. Generate observations ONLY for agents at busy locations (2+ agents)
+            agents_to_observe = []
+            for loc in self.environment.locations.values():
+                if len(loc.current_agents) >= 2:
+                    for name in loc.current_agents:
+                        if name in self.agents:
+                            agents_to_observe.append(self.agents[name])
 
-            if observation_tasks:
-                await asyncio.gather(*observation_tasks, return_exceptions=True)
+            if agents_to_observe:
+                sem = asyncio.Semaphore(cfg.AGENT_BATCH_SIZE)
+                async def observe_agent(agent):
+                    async with sem:
+                        observations = self.environment.observe_environment(agent.name)
+                        for obs in observations:
+                            await agent.observe(obs, agent.current_location)
+                await asyncio.gather(*[observe_agent(a) for a in agents_to_observe], return_exceptions=True)
 
             if not self.running:
                 return
 
-            # 3. Check for conversation opportunities
-            await self._update_conversations()
+            # 3. Check for conversation opportunities (new convos only every N ticks)
+            if self.tick_count % cfg.CONVERSATION_CHECK_INTERVAL == 0:
+                await self._update_conversations()
+            else:
+                await self._advance_existing_conversations()
             
             # 4. Process any triggered reflections (handled automatically in agent.observe())
         
@@ -420,6 +425,43 @@ class SmallvilleSimulation:
         except Exception as e:
             logger.error(f"Error updating conversations: {e}")
     
+    async def _advance_existing_conversations(self):
+        """Advance only existing active conversations (no new conversation checks)."""
+        try:
+            if not self.conversation_manager.active_conversations:
+                return
+
+            memory_streams = {
+                name: agent.memory_stream
+                for name, agent in self.agents.items()
+            }
+            skill_banks = {
+                name: agent.skill_bank
+                for name, agent in self.agents.items()
+            }
+
+            # Track turn counts for display
+            turn_counts = {}
+            for conv in self.conversation_manager.active_conversations.values():
+                key = (conv.agent1, conv.agent2)
+                turn_counts[key] = len(conv.turns)
+
+            await self.conversation_manager.update_conversations(
+                memory_streams, skill_banks,
+                agents=self.agents, current_time=self.current_time,
+                current_tick=self.tick_count
+            )
+
+            # Log new conversation lines
+            for conv in self.conversation_manager.active_conversations.values():
+                key = (conv.agent1, conv.agent2)
+                old_count = turn_counts.get(key, 0)
+                for turn in conv.turns[old_count:]:
+                    other = conv.agent2 if turn.speaker == conv.agent1 else conv.agent1
+                    self.display.add_conversation_line(turn.speaker, other, turn.message[:80])
+        except Exception as e:
+            logger.error(f"Error advancing conversations: {e}")
+
     def _update_display_data(self):
         """Update data for the display."""
         try:

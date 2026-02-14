@@ -178,25 +178,14 @@ class ConversationManager:
             
             llm = await get_llm_client()
             
-            # First, get topic suggestions
-            topic_prompt = CONVERSATION_TOPIC_PROMPT.format(
-                agent_name=speaker,
-                other_agent=target,
-                agent_memories="\n".join(memory_descriptions) if memory_descriptions else "No specific memories",
-                context=f"They are both at {location}"
-            )
-            
-            topics = await llm.generate(topic_prompt, temperature=0.8, max_tokens=100, task="conversation")
-            
-            # Then generate opening based on topics
-            opening_prompt = f"""You are {speaker} starting a conversation with {target} at {location}.
+            # Single LLM call for opening (merged topic + opening generation)
+            memories_text = "\n".join(memory_descriptions) if memory_descriptions else "No specific memories"
+            opening_prompt = f"""You are {speaker} ({personality}) starting a conversation with {target} at {location}.
 
-Your personality: {personality}
+Recent memories:
+{memories_text}
 
-Topics you might discuss:
-{topics}
-
-Generate a natural, brief opening message (1-2 sentences) that {speaker} would say to start the conversation. Consider your personality and current situation."""
+Generate a natural, brief opening message (1-2 sentences) that {speaker} would say to {target}. Be specific and in-character."""
             
             opening = await llm.generate(opening_prompt, temperature=0.9, max_tokens=80, task="conversation")
             return opening.strip()
@@ -269,27 +258,10 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
             return "I see."
     
     async def should_end_conversation(self, conversation: Conversation) -> bool:
-        """Determine if a conversation should end."""
+        """Determine if a conversation should end (rule-based, no LLM)."""
         if len(conversation.turns) < 2:
             return False
-        
-        if len(conversation.turns) >= conversation.max_turns:
-            return True
-        
-        try:
-            llm = await get_llm_client()
-            prompt = CONVERSATION_ENDING_PROMPT.format(
-                agent1=conversation.agent1,
-                agent2=conversation.agent2,
-                conversation_history=conversation.get_history_text()
-            )
-            
-            response = await llm.generate(prompt, temperature=0.6, max_tokens=10, task="conversation")
-            return response.strip().upper() == "YES"
-            
-        except Exception as e:
-            logger.error(f"Error determining conversation ending: {e}")
-            return len(conversation.turns) >= 6  # Default fallback
+        return len(conversation.turns) >= cfg.MAX_CONVERSATION_TURNS
     
     async def end_conversation(self, conversation: Conversation,
                               memory_streams: Dict[str, MemoryStream],
@@ -340,21 +312,13 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
                     except Exception as e:
                         logger.error(f"Error in reactive re-planning for {agent_name}: {e}")
         
-        # Distill skills from the conversation for both participants
-        if skill_banks:
-            outcome = "success" if len(conversation.turns) >= 3 else "failure"
-            conv_text = conversation.get_history_text()
-            for agent_name in [conversation.agent1, conversation.agent2]:
-                if agent_name in skill_banks:
-                    try:
-                        asyncio.create_task(
-                            self._distill_and_store_skill(
-                                skill_banks[agent_name], agent_name,
-                                conv_text, outcome, conversation.location
-                            )
-                        )
-                    except Exception as e:
-                        logger.debug(f"Conversation skill distillation failed: {e}")
+        # Skill distillation disabled for performance
+        # if skill_banks:
+        #     outcome = "success" if len(conversation.turns) >= 3 else "failure"
+        #     conv_text = conversation.get_history_text()
+        #     for agent_name in [conversation.agent1, conversation.agent2]:
+        #         if agent_name in skill_banks:
+        #             asyncio.create_task(self._distill_and_store_skill(...))
 
     async def _distill_and_store_skill(self, skill_bank: SkillBank, agent_name: str,
                                        conv_text: str, outcome: str, location: str):
