@@ -153,6 +153,7 @@ RE_PLAN = re.compile(r"(?P<agent>\w[\w ]+?) planned day with (?P<count>\d+) acti
 RE_MOVE = re.compile(r"environment.*?(?P<agent>\w[\w ]+?) moved to (?P<loc>.+)$")
 RE_CONV_START = re.compile(r"Started conversation between (?P<a1>.+?) and (?P<a2>.+?) at (?P<loc>.+)$")
 RE_CONV_LINE = re.compile(r"Conversation: (?P<speaker>.+?): (?P<line>.+)$")
+RE_REPLAN = re.compile(r"\[replan\] (?P<agent>.+?) added: (?P<time>\d{2}:\d{2}) — (?P<desc>.+?) at (?P<loc>.+)$")
 
 
 def collect_digest_event(line, reflections, skills, plans, moves, conversations=None):
@@ -180,6 +181,16 @@ def collect_digest_event(line, reflections, skills, plans, moves, conversations=
         moves[m.group('agent')] = m.group('loc')
         return
     
+    m = RE_REPLAN.search(line)
+    if m:
+        if conversations is not None:
+            # Store replans in a special key
+            conversations.setdefault("__replans__", {"loc": "", "lines": []})
+            conversations["__replans__"]["lines"].append(
+                (m.group('agent'), f"{m.group('time')} — {m.group('desc')} at {m.group('loc')}")
+            )
+        return
+    
     if conversations is not None:
         m = RE_CONV_START.search(line)
         if m:
@@ -199,78 +210,61 @@ def collect_digest_event(line, reflections, skills, plans, moves, conversations=
 
 
 def build_digest(reflections, skills, plans, moves, conversations=None):
-    """Build the hourly digest message. Returns None if nothing happened."""
+    """Build a compact digest message."""
     conversations = conversations or {}
     if not reflections and not skills and not plans and not moves and not conversations:
         return None
     
-    parts = ["📊 **Smallville Hourly Digest**\n"]
+    parts = ["🏘 **Smallville Update**"]
     
     if conversations:
-        parts.append("💬 **Conversations:**")
+        # Show replans first
+        replans = conversations.pop("__replans__", None)
+        if replans and replans["lines"]:
+            for agent, desc in replans["lines"]:
+                parts.append(f"🔄 {agent.split()[0]} re-planned: {desc}")
+        
         for pair, data in conversations.items():
-            loc = data["loc"]
             lines = data["lines"]
             if not lines:
-                parts.append(f"  • {pair} at {loc} (no dialogue captured)")
                 continue
-            # Build a short summary: first line + topic hint from key phrases
-            topics = _summarize_conversation(lines)
-            parts.append(f"  • {pair} at {loc} ({len(lines)} turns)")
-            parts.append(f"    _{topics}_")
-        parts.append("")
+            first = lines[0][1][:50] + ("..." if len(lines[0][1]) > 50 else "")
+            parts.append(f"💬 {pair} ({len(lines)}t): _{first}_")
     
     if moves:
-        parts.append("🚶 **Current Locations:**")
         loc_agents = {}
         for agent, loc in moves.items():
-            loc_agents.setdefault(loc, []).append(agent)
-        for loc, agents in sorted(loc_agents.items()):
-            parts.append(f"  • {loc}: {', '.join(agents)}")
-        parts.append("")
+            loc_agents.setdefault(loc, []).append(agent.split()[0])
+        # Only show locations with 2+ agents (interesting clustering)
+        busy = {loc: a for loc, a in loc_agents.items() if len(a) >= 2}
+        if busy:
+            locs = " · ".join(f"{loc}: {', '.join(a)}" for loc, a in sorted(busy.items()))
+            parts.append(f"📍 {locs}")
     
     if reflections:
-        agent_refs = {}
+        # Count per agent, show top 3 most active reflectors
+        agent_count = {}
         for agent, ref in reflections:
-            agent_refs[agent] = ref
-        parts.append("🪞 **Reflections:**")
-        for agent, ref in agent_refs.items():
-            parts.append(f"  • {agent}: _{ref}_")
-        parts.append("")
+            name = agent.split()[0]
+            agent_count[name] = agent_count.get(name, 0) + 1
+        top = sorted(agent_count.items(), key=lambda x: -x[1])[:3]
+        total = sum(agent_count.values())
+        top_str = ", ".join(f"{a} ({c})" for a, c in top)
+        parts.append(f"🪞 {total} reflections — {top_str}")
     
     if skills:
+        # Count unique skills per agent, just show totals
         agent_skills = {}
         for agent, skill, cat in skills:
-            agent_skills.setdefault(agent, []).append(skill)
-        parts.append("🌱 **Skills Learned:**")
-        for agent, skill_list in agent_skills.items():
-            parts.append(f"  • {agent}: {', '.join(skill_list)}")
+            agent_skills.setdefault(agent.split()[0], set()).add(skill)
+        total = sum(len(s) for s in agent_skills.values())
+        top = sorted(agent_skills.items(), key=lambda x: -len(x[1]))[:3]
+        top_str = ", ".join(f"{a} ({len(s)})" for a, s in top)
+        parts.append(f"🌱 {total} skills — {top_str}")
     
-    if plans:
-        parts.append("")
-        parts.append("📋 **Plans:**")
-        for agent, count in plans:
-            parts.append(f"  • {agent}: {count} activities")
+    # Skip plans in regular digests — only interesting on first run
     
     return "\n".join(parts)
-
-
-def _summarize_conversation(lines):
-    """Extract a brief summary from conversation lines."""
-    # Take first and last line to capture opening topic + conclusion
-    all_text = " ".join(msg for _, msg in lines)
-    # Grab first sentence of first speaker and last speaker as summary
-    first_msg = lines[0][1]
-    last_msg = lines[-1][1] if len(lines) > 1 else ""
-    
-    # Truncate each to ~60 chars
-    first_short = first_msg[:60] + ("..." if len(first_msg) > 60 else "")
-    
-    if last_msg and len(lines) > 2:
-        last_short = last_msg[:60] + ("..." if len(last_msg) > 60 else "")
-        return f"{first_short} → {last_short}"
-    else:
-        return first_short
 
 
 def load_state() -> int:

@@ -326,8 +326,10 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
     
     async def end_conversation(self, conversation: Conversation,
                               memory_streams: Dict[str, MemoryStream],
-                              skill_banks: Optional[Dict[str, SkillBank]] = None):
-        """End an active conversation and distill skills from it."""
+                              skill_banks: Optional[Dict[str, SkillBank]] = None,
+                              agents: Optional[Dict] = None,
+                              current_time=None):
+        """End an active conversation, distill skills, and trigger re-planning."""
         conversation.active = False
         
         # Remove from active conversations
@@ -350,6 +352,23 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
         
         logger.info(f"Ended conversation between {conversation.agent1} and {conversation.agent2}")
         
+        # Trigger reactive re-planning for both participants
+        if agents and current_time and conversation.turns:
+            conv_summary = conversation.get_history_text()
+            for agent_name, other_name in [
+                (conversation.agent1, conversation.agent2),
+                (conversation.agent2, conversation.agent1)
+            ]:
+                if agent_name in agents:
+                    try:
+                        changed = await agents[agent_name].react_to_conversation(
+                            other_name, conv_summary, current_time
+                        )
+                        if changed:
+                            logger.info(f"[replan] {agent_name} modified plans after talking to {other_name}")
+                    except Exception as e:
+                        logger.error(f"Error in reactive re-planning for {agent_name}: {e}")
+        
         # Distill skills from the conversation for both participants
         if skill_banks:
             outcome = "success" if len(conversation.turns) >= 3 else "failure"
@@ -357,7 +376,6 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
             for agent_name in [conversation.agent1, conversation.agent2]:
                 if agent_name in skill_banks:
                     try:
-                        import asyncio
                         asyncio.create_task(
                             self._distill_and_store_skill(
                                 skill_banks[agent_name], agent_name,
@@ -387,7 +405,9 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
         memory_stream.add_memory(memory)
     
     async def update_conversations(self, memory_streams: Dict[str, MemoryStream],
-                                   skill_banks: Optional[Dict[str, SkillBank]] = None):
+                                   skill_banks: Optional[Dict[str, SkillBank]] = None,
+                                   agents: Optional[Dict] = None,
+                                   current_time=None):
         """Update all active conversations."""
         conversations_to_end = []
         
@@ -401,7 +421,8 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
         
         # End conversations that should end
         for conversation in conversations_to_end:
-            await self.end_conversation(conversation, memory_streams, skill_banks)
+            await self.end_conversation(conversation, memory_streams, skill_banks, 
+                                       agents=agents, current_time=current_time)
     
     def get_active_conversations_summary(self) -> List[str]:
         """Get summary of all active conversations."""

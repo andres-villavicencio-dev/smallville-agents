@@ -13,7 +13,6 @@ from config import IMPORTANCE_THRESHOLD, MAX_RECENT_MEMORIES, ACTION_DURATION_RA
 import config as cfg
 from prompts import (
     DAILY_PLANNING_PROMPT,
-    PLAN_DECOMPOSITION_PROMPT,
     IMPORTANCE_SCORING_PROMPT,
     REFLECTION_QUESTIONS_PROMPT,
     REFLECTION_GENERATION_PROMPT
@@ -513,6 +512,132 @@ class GenerativeAgent:
         """Retrieve relevant skills formatted for LLM prompts."""
         skills = self.skill_bank.retrieve_relevant_skills(context, top_k=3)
         return self.skill_bank.format_skills_for_prompt(skills)
+
+    async def react_to_conversation(self, other_agent: str, conversation_summary: str, 
+                                      current_time: datetime) -> bool:
+        """React to a completed conversation by potentially modifying the daily plan.
+        Returns True if the plan was modified."""
+        # Cap re-plans to avoid churn
+        if not hasattr(self, '_replan_count'):
+            self._replan_count = 0
+        if self._replan_count >= 3:
+            logger.debug(f"{self.name} hit re-plan cap, skipping")
+            return False
+        
+        # Get remaining plan items
+        remaining = [item for item in self.daily_plan 
+                     if item.end_time() > current_time and not item.completed]
+        if not remaining:
+            remaining_text = "No remaining plans for today."
+        else:
+            remaining_text = "\n".join(
+                f"- {item.start_time.strftime('%H:%M')} — {item.description} at {item.location}"
+                for item in remaining[:8]
+            )
+        
+        # Truncate conversation summary
+        conv_short = conversation_summary[:500] if len(conversation_summary) > 500 else conversation_summary
+        
+        prompt = (
+            f"You are {self.name}. You just finished talking to {other_agent}.\n\n"
+            f"Conversation:\n{conv_short}\n\n"
+            f"Your remaining plans today:\n{remaining_text}\n\n"
+            f"Based on this conversation, should you change your plans?\n"
+            f"If YES, write the new activity in this exact format:\n"
+            f"  TIME - ACTIVITY at LOCATION\n"
+            f"  Example: 17:00 - Attend Valentine's Day party at Hobbs Cafe\n"
+            f"If NO changes needed, write: NO_CHANGE"
+        )
+        
+        try:
+            if cfg.USE_COMMITTEE:
+                from committee import get_committee, EXPERTS
+                committee = get_committee()
+                expert = EXPERTS["social"]
+                from llm import _notify_llm_status
+                _notify_llm_status(self.name, "react_to_conv", expert.model)
+                response = await committee._call_model(expert, prompt)
+            else:
+                llm = await get_llm_client()
+                response = await llm.generate(prompt, temperature=0.6, max_tokens=80, task="react")
+            
+            if not response or "NO_CHANGE" in response.upper():
+                logger.debug(f"{self.name} decided no plan change after talking to {other_agent}")
+                return False
+            
+            # Parse the new activity
+            new_item = self._parse_replan_response(response, current_time)
+            if not new_item:
+                logger.debug(f"{self.name} replan response unparseable: {response[:80]}")
+                return False
+            
+            # Insert into plan: remove conflicting items, add new one
+            self._inject_plan_item(new_item)
+            self._replan_count += 1
+            
+            # Store memory about the decision
+            memory = Memory(
+                agent_name=self.name,
+                description=f"Decided to {new_item.description} after talking to {other_agent}",
+                memory_type="plan",
+                importance_score=7,
+                location=self.current_location
+            )
+            self.memory_stream.add_memory(memory)
+            
+            logger.info(f"[replan] {self.name} added: {new_item.start_time.strftime('%H:%M')} — {new_item.description} at {new_item.location}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error in react_to_conversation for {self.name}: {e}")
+            return False
+    
+    def _parse_replan_response(self, response: str, current_time: datetime) -> Optional[PlanItem]:
+        """Parse a replan response like '17:00 - Attend party at Hobbs Cafe'."""
+        import re
+        # Match pattern: HH:MM - description at location
+        m = re.search(r'(\d{1,2}):(\d{2})\s*[-–]\s*(.+?)\s+at\s+(.+)', response, re.IGNORECASE)
+        if not m:
+            return None
+        
+        hour, minute = int(m.group(1)), int(m.group(2))
+        description = m.group(3).strip()
+        location = m.group(4).strip().rstrip('.')
+        
+        # Build start time using current_time's date
+        start_time = current_time.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        
+        # Only accept future activities
+        if start_time <= current_time:
+            return None
+        
+        return PlanItem(
+            description=description,
+            location=location,
+            start_time=start_time,
+            duration_minutes=self._infer_duration_from_activity(description)
+        )
+    
+    def _inject_plan_item(self, new_item: PlanItem):
+        """Insert a new plan item, removing or shortening conflicts."""
+        new_start = new_item.start_time
+        new_end = new_item.end_time()
+        
+        updated_plan = []
+        for item in self.daily_plan:
+            # Keep items that don't overlap
+            if item.end_time() <= new_start or item.start_time >= new_end:
+                updated_plan.append(item)
+            # Shorten items that partially overlap
+            elif item.start_time < new_start and item.end_time() > new_start:
+                item.duration_minutes = int((new_start - item.start_time).total_seconds() / 60)
+                if item.duration_minutes > 5:
+                    updated_plan.append(item)
+            # Items fully inside the new item's window get dropped
+        
+        updated_plan.append(new_item)
+        updated_plan.sort(key=lambda x: x.start_time)
+        self.daily_plan = updated_plan
 
     def get_status_summary(self) -> str:
         """Get a summary of the agent's current status."""

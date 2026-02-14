@@ -394,7 +394,10 @@ class SmallvilleSimulation:
                 name: agent.skill_bank
                 for name, agent in self.agents.items()
             }
-            await self.conversation_manager.update_conversations(memory_streams, skill_banks)
+            await self.conversation_manager.update_conversations(
+                memory_streams, skill_banks, 
+                agents=self.agents, current_time=self.current_time
+            )
             
             # Log any new conversation lines to display
             for conv in self.conversation_manager.active_conversations.values():
