@@ -17,12 +17,7 @@ from prompts import (
     REFLECTION_QUESTIONS_PROMPT,
     REFLECTION_GENERATION_PROMPT
 )
-
-# Committee integration
-# Lazy import — committee may not be needed if not in committee mode
-def _get_committee_imports():
-    from committee import get_committee, decide_action, reflect as committee_reflect, plan_day as committee_plan
-    return get_committee, decide_action, committee_reflect, committee_plan
+from reflection_engine import ReflectionEngine, PlanningEngine
 
 logger = logging.getLogger(__name__)
 
@@ -146,126 +141,66 @@ class GenerativeAgent:
             await self.reflect()
     
     async def reflect(self) -> List[Memory]:
-        """Perform reflection process as described in the paper."""
+        """Perform reflection process as described in the paper.
+
+        Reflection is the agent's ability to synthesize recent observations into
+        higher-level insights. This method:
+
+        1. Checks if enough recent memories have accumulated to warrant reflection
+        2. Uses the appropriate strategy (single-model or committee) to generate
+           reflection questions and answers based on recent memories
+        3. Stores the reflection as a high-importance memory
+
+        Returns:
+            List of Memory objects created from reflection (usually 1-3)
+        """
         try:
-            # Get recent memories (needed for both modes)
+            # Get recent memories
             recent_memories = self.memory_stream.get_memories(limit=MAX_RECENT_MEMORIES)
             if len(recent_memories) < 3:
                 return []
-            
-            memory_descriptions = [mem.description for mem in recent_memories]
 
-            # ── Committee mode: use Memory + Emotional + Judge pipeline ──
-            if cfg.USE_COMMITTEE:
-                _, _, committee_reflect, _ = _get_committee_imports()
-                memories_text = "\n".join(f"- {m}" for m in memory_descriptions[:30])
-                situation = (
-                    f"{self.name} is at {self.current_location}. "
-                    f"Current activity: {self.current_plan_item.description if self.current_plan_item else 'idle'}."
-                )
-                reflection_text = await committee_reflect(
-                    self.name, situation, memories=memories_text
-                )
-                if reflection_text:
-                    reflection_memory = Memory(
-                        agent_name=self.name,
-                        description=reflection_text,
-                        memory_type="reflection",
-                        importance_score=8,
-                        location=self.current_location,
+            # Use reflection strategy (handles committee vs single-model)
+            reflection_strategy = ReflectionEngine.get_engine()
+            reflections = await reflection_strategy.reflect(self)
+
+            # Post-process: update reflection count and trigger skill distillation
+            if reflections:
+                self.last_reflection_time = datetime.now()
+                self.reflection_count += 1
+
+                # Distill skill from reflection (fire-and-forget, don't block)
+                for reflection in reflections:
+                    asyncio.create_task(
+                        self._distill_skill_from_reflection(reflection.description)
                     )
-                    self.memory_stream.add_memory(reflection_memory)
-                    self.last_reflection_time = datetime.now()
-                    self.reflection_count += 1
-                    logger.info(f"{self.name} reflected (committee): {reflection_text}")
 
-                    # Distill skill from reflection (fire-and-forget, don't block)
-                    asyncio.create_task(self._distill_skill_from_reflection(reflection_text))
-
-                    return [reflection_memory]
-                return []
-
-            # ── Single-model mode ──
-            llm = await get_llm_client()
-            
-            # Step 2: Generate reflection questions
-            questions = await llm.generate_reflection_questions(memory_descriptions, agent_name=self.name)
-            if not questions:
-                logger.warning(f"No reflection questions generated for {self.name}")
-                return []
-            
-            reflections = []
-            
-            # Step 3: For each question, retrieve relevant memories and generate reflection
-            for question in questions:
-                try:
-                    # Retrieve memories relevant to this question
-                    relevant_memories = self.memory_stream.retrieve_memories(question, top_k=10)
-                    relevant_descriptions = [mem[0].description for mem in relevant_memories]
-                    source_memory_ids = [mem[0].id for mem in relevant_memories if mem[0].id]
-                    
-                    if not relevant_descriptions:
-                        continue
-                    
-                    # Generate reflection
-                    reflection_text = await llm.generate_reflection(question, relevant_descriptions, agent_name=self.name)
-                    
-                    if reflection_text:
-                        # Create reflection memory
-                        reflection_memory = Memory(
-                            agent_name=self.name,
-                            description=reflection_text,
-                            memory_type="reflection",
-                            importance_score=8,  # Reflections are high importance
-                            location=self.current_location,
-                            source_memory_ids=source_memory_ids
-                        )
-                        
-                        memory_id = self.memory_stream.add_memory(reflection_memory)
-                        reflections.append(reflection_memory)
-                        
-                        logger.info(f"{self.name} reflected: {reflection_text}")
-                
-                except Exception as e:
-                    logger.error(f"Error generating reflection for question '{question}': {e}")
-                    continue
-            
-            self.last_reflection_time = datetime.now()
-            self.reflection_count += 1
-            
             return reflections
-        
+
         except Exception as e:
             logger.error(f"Error during reflection for {self.name}: {e}")
             return []
     
     async def plan_daily_schedule(self, date: datetime) -> List[PlanItem]:
-        """Generate a daily plan using the agent's persona and memories."""
+        """Generate a daily plan using the agent's persona and memories.
+
+        Uses the planning engine (single-model or committee) to generate a daily
+        schedule, then parses and decomposes the plan into actionable items.
+
+        Args:
+            date: The date to plan for
+
+        Returns:
+            List of PlanItem objects representing the day's activities
+        """
         try:
             # Get agent description and recent memories for context
             agent_description = format_agent_description(self.name)
             date_str = date.strftime("%A, %B %d, %Y")
 
-            # ── Committee mode: Temporal + Memory + Spatial + Judge ──
-            if cfg.USE_COMMITTEE:
-                _, _, _, committee_plan = _get_committee_imports()
-                recent_memories = self.memory_stream.get_memories(limit=20)
-                memories_text = "\n".join(f"- {m.description}" for m in recent_memories)
-                situation = (
-                    f"{agent_description}\n"
-                    f"Date: {date_str}\n"
-                    f"Generate a detailed daily schedule for {self.name} with 6-8 activities, "
-                    f"including times and locations. Format: time - activity at location"
-                )
-                response = await committee_plan(
-                    self.name, situation, memories=memories_text
-                )
-            else:
-                # ── Single-model mode ──
-                llm = await get_llm_client()
-                response = await llm.generate_daily_plan(
-                    self.name, agent_description, date_str
-                )
+            # Use planning engine (handles committee vs single-model)
+            planning_engine = PlanningEngine.get_engine()
+            response = await planning_engine.plan_day(self, date)
             
             # Parse the response into plan items
             plan_items = await self._parse_daily_plan(response, date)
@@ -304,7 +239,18 @@ class GenerativeAgent:
             return []
     
     async def _parse_daily_plan(self, plan_text: str, date: datetime) -> List[PlanItem]:
-        """Parse LLM-generated daily plan into PlanItem objects."""
+        """Parse LLM-generated daily plan text into PlanItem objects.
+
+        Parses lines from the LLM response, extracting times, inferring locations
+        and durations, and creating PlanItem objects.
+
+        Args:
+            plan_text: Raw text from LLM daily plan
+            date: The date being planned for
+
+        Returns:
+            List of PlanItem objects with parsed data
+        """
         plan_items = []
         lines = plan_text.split('\n')
         current_time = date.replace(hour=6, minute=0, second=0, microsecond=0)  # Start at 6 AM
@@ -517,11 +463,12 @@ class GenerativeAgent:
                                       current_time: datetime) -> bool:
         """React to a completed conversation by potentially modifying the daily plan.
         Returns True if the plan was modified."""
+        logger.info(f"[replan] {self.name} evaluating plan after talking to {other_agent}")
         # Cap re-plans to avoid churn
         if not hasattr(self, '_replan_count'):
             self._replan_count = 0
         if self._replan_count >= 3:
-            logger.debug(f"{self.name} hit re-plan cap, skipping")
+            logger.info(f"[replan] {self.name} hit re-plan cap, skipping")
             return False
         
         # Get remaining plan items
@@ -561,14 +508,14 @@ class GenerativeAgent:
                 llm = await get_llm_client()
                 response = await llm.generate(prompt, temperature=0.6, max_tokens=80, task="react")
             
-            if not response or "NO_CHANGE" in response.upper():
-                logger.debug(f"{self.name} decided no plan change after talking to {other_agent}")
+            if not response:
+                logger.info(f"[replan] {self.name}: no change after talking to {other_agent}")
                 return False
             
-            # Parse the new activity
+            # Try to parse — if it doesn't match TIME format, treat as no-change
             new_item = self._parse_replan_response(response, current_time)
             if not new_item:
-                logger.debug(f"{self.name} replan response unparseable: {response[:80]}")
+                logger.info(f"[replan] {self.name}: no change — {response[:80]}")
                 return False
             
             # Insert into plan: remove conflicting items, add new one

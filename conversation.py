@@ -15,10 +15,7 @@ from prompts import (
     CONVERSATION_TOPIC_PROMPT,
     CONVERSATION_ENDING_PROMPT
 )
-
-def _get_committee_conv_imports():
-    from committee import should_converse as committee_should_converse, generate_dialogue
-    return committee_should_converse, generate_dialogue
+from reflection_engine import ConversationEngine
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +63,15 @@ class Conversation:
         """Get the two participants."""
         return self.agent1, self.agent2
 
+CONVERSATION_COOLDOWN_TICKS = 30  # ~5 min sim time at 10s/tick — no repeat convos between same pair
+
 class ConversationManager:
     """Manages conversations between agents."""
     
     def __init__(self):
         self.active_conversations: Dict[Tuple[str, str], Conversation] = {}
         self.conversation_history: List[Conversation] = []
+        self._cooldowns: Dict[Tuple[str, str], int] = {}  # pair -> tick when cooldown expires
     
     def get_conversation_key(self, agent1: str, agent2: str) -> Tuple[str, str]:
         """Get a consistent key for agent pair."""
@@ -82,52 +82,43 @@ class ConversationManager:
         key = self.get_conversation_key(agent1, agent2)
         return key in self.active_conversations
     
+    def is_on_cooldown(self, agent1: str, agent2: str, current_tick: int = 0) -> bool:
+        """Check if this pair is on conversation cooldown."""
+        key = self.get_conversation_key(agent1, agent2)
+        expires = self._cooldowns.get(key, 0)
+        return current_tick < expires
+    
+    def set_cooldown(self, agent1: str, agent2: str, current_tick: int):
+        """Set cooldown for a pair after conversation ends."""
+        key = self.get_conversation_key(agent1, agent2)
+        self._cooldowns[key] = current_tick + CONVERSATION_COOLDOWN_TICKS
+    
     def get_active_conversation(self, agent1: str, agent2: str) -> Optional[Conversation]:
         """Get active conversation between agents."""
         key = self.get_conversation_key(agent1, agent2)
         return self.active_conversations.get(key)
     
-    async def should_initiate_conversation(self, initiator: str, target: str, 
+    async def should_initiate_conversation(self, initiator: str, target: str,
                                          context: str, memory_stream: MemoryStream) -> bool:
-        """Determine if initiator should start conversation with target."""
+        """Determine if initiator should start conversation with target.
+
+        Uses the conversation engine (single-model or committee) to decide
+        whether two agents at the same location should start talking.
+
+        Args:
+            initiator: Name of agent initiating conversation
+            target: Name of agent being approached
+            context: Context string (e.g., "Both at Hobbs Cafe")
+            memory_stream: Initiator's memory stream for context
+
+        Returns:
+            True if conversation should start, False otherwise
+        """
         try:
-            # Get relevant memories for initiator
-            query = f"conversation with {target} or {target} or talking"
-            relevant_memories = memory_stream.retrieve_memories(query, top_k=5)
-            memory_descriptions = [mem[0].description for mem in relevant_memories]
+            # Use conversation engine (handles committee vs single-model)
+            conv_engine = ConversationEngine.get_engine()
+            return await conv_engine.should_initiate(initiator, target, context, memory_stream)
 
-            # ── Committee mode: Social + Emotional + Judge ──
-            if cfg.USE_COMMITTEE:
-                committee_should_converse, _ = _get_committee_conv_imports()
-                # Retrieve relevant social skills if skill_bank available
-                skills_text = ""
-                try:
-                    from agent import GenerativeAgent  # avoid circular at top level
-                except ImportError:
-                    pass
-                situation = (
-                    f"{initiator} and {target} are both at the same location. {context}\n"
-                    f"Recent memories: {'; '.join(memory_descriptions[:3]) if memory_descriptions else 'None'}"
-                )
-                should_talk = await committee_should_converse(initiator, situation)
-                logger.info(f"Conversation check (committee): {initiator} -> {target}: {'YES' if should_talk else 'NO'}")
-                return should_talk
-
-            # ── Single-model mode ──
-            llm = await get_llm_client()
-            prompt = CONVERSATION_INITIATION_PROMPT.format(
-                agent_name=initiator,
-                other_agent=target,
-                context=context,
-                agent_memories="\n".join(memory_descriptions) if memory_descriptions else "No recent relevant memories"
-            )
-            
-            response = await llm.generate(prompt, temperature=0.6, max_tokens=10, task="conversation")
-            should_talk = response.strip().upper() == "YES"
-            
-            logger.debug(f"Conversation initiation: {initiator} -> {target}: {'YES' if should_talk else 'NO'}")
-            return should_talk
-            
         except Exception as e:
             logger.error(f"Error determining conversation initiation: {e}")
             return False
@@ -269,33 +260,9 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
             persona = get_agent_persona(speaker)
             personality = persona.get("personality", "friendly")
 
-            # ── Committee mode: Memory + Emotional + Dialogue pipeline ──
-            if cfg.USE_COMMITTEE:
-                _, generate_dialogue = _get_committee_conv_imports()
-                situation = (
-                    f"{speaker} (personality: {personality}) is talking to {other_agent} "
-                    f"at {conversation.location}.\n"
-                    f"Conversation so far:\n{conversation.get_history_text()}\n"
-                    f"Generate {speaker}'s next line of dialogue."
-                )
-                memories_text = "\n".join(f"- {m}" for m in memory_descriptions[-5:]) if memory_descriptions else "No relevant memories"
-                response = await generate_dialogue(speaker, situation, memories=memories_text)
-                return response.strip() if response else "I see."
-
-            # ── Single-model mode ──
-            description = format_agent_description(speaker)
-            
-            llm = await get_llm_client()
-            prompt = CONVERSATION_RESPONSE_PROMPT.format(
-                agent_name=speaker,
-                other_agent=other_agent,
-                conversation_history=conversation.get_history_text(),
-                agent_memories="\n".join(memory_descriptions[-5:]) if memory_descriptions else "No relevant memories",
-                agent_personality=personality
-            )
-            
-            response = await llm.generate(prompt, temperature=0.9, max_tokens=100, task="conversation")
-            return response.strip()
+            # Use conversation engine (handles committee vs single-model)
+            conv_engine = ConversationEngine.get_engine()
+            return await conv_engine.generate_response(speaker, other_agent, conversation, memory_stream)
             
         except Exception as e:
             logger.error(f"Error generating conversation response: {e}")
@@ -352,6 +319,10 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
         
         logger.info(f"Ended conversation between {conversation.agent1} and {conversation.agent2}")
         
+        # Set cooldown so they don't immediately start talking again
+        if current_time is not None and hasattr(self, '_current_tick'):
+            self.set_cooldown(conversation.agent1, conversation.agent2, self._current_tick)
+        
         # Trigger reactive re-planning for both participants
         if agents and current_time and conversation.turns:
             conv_summary = conversation.get_history_text()
@@ -407,8 +378,10 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
     async def update_conversations(self, memory_streams: Dict[str, MemoryStream],
                                    skill_banks: Optional[Dict[str, SkillBank]] = None,
                                    agents: Optional[Dict] = None,
-                                   current_time=None):
+                                   current_time=None,
+                                   current_tick: int = 0):
         """Update all active conversations."""
+        self._current_tick = current_tick
         conversations_to_end = []
         
         for conversation in list(self.active_conversations.values()):

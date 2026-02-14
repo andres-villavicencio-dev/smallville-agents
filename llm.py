@@ -5,6 +5,12 @@ import logging
 import requests
 from typing import Optional, Dict, Any, List
 from config import MODELS, OLLAMA_BASE_URL
+from prompts import (
+    IMPORTANCE_SCORING_PROMPT,
+    REFLECTION_QUESTIONS_PROMPT,
+    REFLECTION_GENERATION_PROMPT,
+    DAILY_PLANNING_PROMPT
+)
 
 # GPU Queue integration
 try:
@@ -109,11 +115,7 @@ class OllamaClient:
     
     async def score_importance(self, observation: str, agent_name: str = "") -> int:
         """Score the importance of an observation (1-10). Uses fast/small model."""
-        prompt = f"""On a scale of 1-10 where 1 is mundane (e.g., brushing teeth) and 10 is life-changing (e.g., getting married), rate the importance of this observation:
-
-{observation}
-
-Respond with only a number from 1 to 10."""
+        prompt = IMPORTANCE_SCORING_PROMPT.format(observation=observation)
 
         response = await self.generate(prompt, temperature=0.3, max_tokens=5, task="importance", agent_name=agent_name)
         try:
@@ -126,13 +128,11 @@ Respond with only a number from 1 to 10."""
     async def generate_reflection_questions(self, recent_memories: List[str], agent_name: str = "") -> List[str]:
         """Generate 3 salient high-level questions from recent memories."""
         memories_text = "\n".join(f"- {memory}" for memory in recent_memories)
-        
-        prompt = f"""Given only the information above, what are the 3 most salient high-level questions we can ask about the person's recent experiences and activities?
 
-Recent observations:
-{memories_text}
-
-Respond with exactly 3 questions, one per line, starting each with a number (1., 2., 3.)."""
+        prompt = REFLECTION_QUESTIONS_PROMPT.format(
+            agent_name=agent_name,
+            recent_memories=memories_text
+        )
 
         response = await self.generate(prompt, temperature=0.8, max_tokens=200, task="reflection", agent_name=agent_name)
         
@@ -147,24 +147,22 @@ Respond with exactly 3 questions, one per line, starting each with a number (1.,
     async def generate_reflection(self, question: str, relevant_memories: List[str], agent_name: str = "") -> str:
         """Generate a reflection based on a question and relevant memories."""
         memories_text = "\n".join(f"- {memory}" for memory in relevant_memories)
-        
-        prompt = f"""Based on the following memories, provide a thoughtful reflection addressing this question: {question}
 
-Relevant memories:
-{memories_text}
-
-Write a 2-3 sentence reflection that synthesizes insights from these memories."""
+        prompt = REFLECTION_GENERATION_PROMPT.format(
+            question=question,
+            relevant_memories=memories_text
+        )
 
         return await self.generate(prompt, temperature=0.7, max_tokens=150, task="reflection", agent_name=agent_name)
     
-    async def generate_daily_plan(self, agent_name: str, agent_description: str, 
+    async def generate_daily_plan(self, agent_name: str, agent_description: str,
                                  current_date: str) -> str:
         """Generate a daily plan for an agent."""
-        prompt = f"""{agent_description}
-
-Here is {agent_name}'s plan for {current_date}:
-1) wake up and complete the morning routine at 6:00 am
-2) """
+        prompt = DAILY_PLANNING_PROMPT.format(
+            agent_description=agent_description,
+            agent_name=agent_name,
+            date=current_date
+        )
 
         response = await self.generate(prompt, temperature=0.8, max_tokens=300, task="planning")
         return response
@@ -194,43 +192,6 @@ List the specific actions in chronological order. Each action should be 5-15 min
         
         return actions
     
-    async def should_initiate_conversation(self, agent_name: str, other_agent: str,
-                                          context: str, agent_memories: List[str]) -> bool:
-        """Determine if an agent should initiate conversation."""
-        memories_text = "\n".join(f"- {memory}" for memory in agent_memories[-5:])  # Recent memories
-        
-        prompt = f"""Should {agent_name} initiate a conversation with {other_agent}?
-
-Context: {context}
-
-{agent_name}'s recent memories:
-{memories_text}
-
-Consider: Are they likely to want to talk? Do they have something to discuss? Is it an appropriate time/place?
-
-Respond with only YES or NO."""
-
-        response = await self.generate(prompt, temperature=0.6, max_tokens=5, task="conversation", agent_name=agent_name)
-        return response.strip().upper() == "YES"
-    
-    async def generate_conversation_response(self, agent_name: str, other_agent: str,
-                                           conversation_history: List[str],
-                                           agent_memories: List[str]) -> str:
-        """Generate a conversation response."""
-        history_text = "\n".join(conversation_history)
-        memories_text = "\n".join(f"- {memory}" for memory in agent_memories[-10:])
-        
-        prompt = f"""You are {agent_name}. Continue this conversation with {other_agent}:
-
-{history_text}
-
-Your recent memories:
-{memories_text}
-
-Respond naturally as {agent_name} would. Keep it conversational and brief (1-2 sentences)."""
-
-        return await self.generate(prompt, temperature=0.9, max_tokens=100, task="conversation", agent_name=agent_name)
-
 # Global client instance
 llm_client = OllamaClient()
 

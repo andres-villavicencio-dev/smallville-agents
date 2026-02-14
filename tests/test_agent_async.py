@@ -55,8 +55,8 @@ async def test_observe_triggers_reflection(test_agent, patch_llm):
 
     initial_reflection_count = test_agent.reflection_count
 
-    # Mock get_recent_importance_sum to return value >150 to trigger reflection
-    with patch.object(test_agent.memory_stream, 'get_recent_importance_sum', return_value=200):
+    # Mock get_importance_since to return value >150 to trigger reflection
+    with patch.object(test_agent.memory_stream, 'get_importance_since', return_value=200):
         await test_agent.observe("high importance observation", "location")
 
     # Reflection should have been triggered

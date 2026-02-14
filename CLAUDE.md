@@ -24,6 +24,7 @@ python main.py --speed 5 --days 3
 python main.py --no-gpu-queue          # Skip GPU queue, call Ollama directly
 python main.py --load-state saves/X.json
 python main.py --committee             # Mixture-of-experts mode
+python main.py --webui                 # Launch REST API + WebSocket map UI
 python main.py --config                # Print config and exit
 
 # Shell wrapper (checks Ollama health first)
@@ -32,29 +33,36 @@ python main.py --config                # Print config and exit
 # Override models via env vars
 OLLAMA_MODEL=llama3.2:3b python main.py
 MODEL_PLANNING=qwen2.5:3b MODEL_CONVERSATION=llama3.2:3b python main.py
-```
 
-There is no test suite. Validation is done via `simulation.log` inspection.
+# Run tests
+python -m pytest tests/ -v
+```
 
 ## Architecture
 
 ```
 main.py (SmallvilleSimulation)  — orchestrates tick loop, init, save/load, shutdown
   ├── agent.py (GenerativeAgent)     — cognition: plan, observe, reflect, act
-  │     └── memory.py (MemoryStream) — SQLite+FTS5 storage, TF-IDF retrieval scoring
+  │     ├── memory.py (MemoryStream) — SQLite+FTS5 storage, TF-IDF retrieval scoring
+  │     └── skillbank.py (SkillBank) — hierarchical skill library distilled from experience
   ├── environment.py (SmallvilleEnvironment) — 12 locations, agent movement tracking
   ├── conversation.py (ConversationManager)  — memory-driven dialogue between agents
   ├── llm.py (OllamaClient)         — async Ollama API + GPU queue integration
   ├── committee.py                   — optional mixture-of-experts (5 specialist models + judge)
   ├── display.py (SimulationDisplay) — Rich terminal UI with live panels
+  ├── webui.py                       — REST API + WebSocket server for browser-based map UI
+  ├── telegram_broadcaster.py        — optional Telegram channel broadcasting
   ├── personas.py                    — 25 agent definitions (dict-based)
   ├── prompts.py                     — LLM prompt templates
-  └── config.py                      — all tunable parameters and constants
+  ├── config.py                      — all tunable parameters and constants
+  └── tests/                         — pytest suite (memory, agent, environment, conversation)
 ```
 
 **Tick loop** (`SmallvilleSimulation.run`): Each tick advances `TICK_DURATION_SECONDS` (10s game time). Per tick: agent planning → observation → conversation initiation → display update.
 
 **Memory retrieval** scores each memory as `α×recency + β×importance + γ×relevance` where recency uses exponential decay (0.99), importance is LLM-rated 1-10, and relevance is TF-IDF cosine similarity. Reflection triggers when cumulative importance of recent observations exceeds 150.
+
+**SkillBank** (`skillbank.py`): Agents distill experiences (conversations, reflections, plan outcomes) into reusable skills stored in SQLite. Skills are retrieved by TF-IDF similarity and weighted by effectiveness. Inspired by SkillRL (arXiv:2602.08234).
 
 **Task-specific model routing** (`config.py:MODELS`): Different Ollama models are assigned to planning, conversation, reflection, and importance-scoring tasks. Committee mode (`--committee`) replaces single-model calls with 5 specialist experts (social, spatial, temporal, emotional, memory) plus a judge synthesizer.
 
@@ -62,7 +70,7 @@ main.py (SmallvilleSimulation)  — orchestrates tick loop, init, save/load, shu
 
 ## Key Data Paths
 
-- `db/memories.db` — SQLite database for all agent memories (created at runtime)
+- `db/memories.db` — SQLite database for all agent memories and skills (created at runtime)
 - `saves/` — JSON state snapshots (auto-save every 100 ticks)
 - `simulation.log` — detailed activity log
 

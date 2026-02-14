@@ -62,6 +62,7 @@ class SkillBank:
         self._skill_vectors = None
         self._skill_texts: List[str] = []
         self._skill_ids: List[int] = []
+        self._effectiveness_cache: Dict[int, float] = {}  # Cache for effectiveness scores
         self._init_tables()
         self._rebuild_vectors()
 
@@ -159,24 +160,24 @@ class SkillBank:
             query_vec = self.vectorizer.transform([context])
             similarities = cosine_similarity(query_vec, self._skill_vectors)[0]
 
-            # Combine similarity with effectiveness score
+            # Combine similarity with effectiveness score (use cached effectiveness)
             combined = []
             for i, sim in enumerate(similarities):
                 skill_id = self._skill_ids[i]
                 # Weighted: 70% relevance, 30% effectiveness
-                score = 0.7 * sim + 0.3 * self._get_effectiveness(skill_id)
+                score = 0.7 * sim + 0.3 * self._get_effectiveness_cached(skill_id)
                 combined.append((skill_id, score))
 
             combined.sort(key=lambda x: x[1], reverse=True)
             top_ids = [sid for sid, _ in combined[:top_k]]
 
-            # Fetch full skill objects and mark as used
-            skills = []
-            for sid in top_ids:
-                skill = self._get_skill_by_id(sid)
-                if skill:
-                    self._increment_use_count(sid)
-                    skills.append(skill)
+            # Batch fetch all skill objects (single query instead of N)
+            skills = self._batch_get_skills_by_ids(top_ids)
+
+            # Batch increment use counts (single query instead of N)
+            if top_ids:
+                self._batch_increment_use_counts(top_ids)
+
             return skills
 
         except Exception as e:
@@ -189,19 +190,18 @@ class SkillBank:
         outcome: 1.0 = great result, 0.0 = bad result
         """
         try:
+            old = self._effectiveness_cache.get(skill_id, 0.5)
+            alpha = 0.3  # EMA weight for new observation
+            new_eff = alpha * outcome + (1 - alpha) * old
+
             with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT effectiveness FROM skills WHERE id = ?", (skill_id,))
-                row = cursor.fetchone()
-                if not row:
-                    return
-                old = row[0]
-                alpha = 0.3  # EMA weight for new observation
-                new_eff = alpha * outcome + (1 - alpha) * old
-                cursor.execute("""
+                conn.execute("""
                     UPDATE skills SET effectiveness = ?, updated_at = ? WHERE id = ?
                 """, (new_eff, datetime.now().isoformat(), skill_id))
                 conn.commit()
+
+            # Update cache
+            self._effectiveness_cache[skill_id] = new_eff
         except Exception as e:
             logger.error(f"Error updating effectiveness: {e}")
 
@@ -274,7 +274,7 @@ class SkillBank:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT id, name, principle, when_to_apply
+                    SELECT id, name, principle, when_to_apply, effectiveness
                     FROM skills WHERE agent_name = ?
                 """, (self.agent_name,))
                 rows = cursor.fetchall()
@@ -283,12 +283,15 @@ class SkillBank:
                 self._skill_vectors = None
                 self._skill_texts = []
                 self._skill_ids = []
+                self._effectiveness_cache = {}
                 return
 
             self._skill_ids = [r[0] for r in rows]
             # Combine name + principle + when_to_apply for richer vectors
             self._skill_texts = [f"{r[1]} {r[2]} {r[3]}" for r in rows]
             self._skill_vectors = self.vectorizer.fit_transform(self._skill_texts)
+            # Populate effectiveness cache
+            self._effectiveness_cache = {r[0]: r[4] for r in rows}
         except Exception as e:
             logger.error(f"Error rebuilding skill vectors: {e}")
             self._skill_vectors = None
@@ -335,6 +338,44 @@ class SkillBank:
                 conn.commit()
         except Exception as e:
             logger.error(f"Error incrementing use count: {e}")
+
+    def _get_effectiveness_cached(self, skill_id: int) -> float:
+        """Get effectiveness from cache (no DB query)."""
+        return self._effectiveness_cache.get(skill_id, 0.5)
+
+    def _batch_get_skills_by_ids(self, skill_ids: List[int]) -> List[Skill]:
+        """Fetch multiple skills by ID in a single query."""
+        if not skill_ids:
+            return []
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                placeholders = ','.join('?' * len(skill_ids))
+                cursor = conn.cursor()
+                cursor.execute(f"""
+                    SELECT * FROM skills WHERE id IN ({placeholders})
+                """, skill_ids)
+                rows = cursor.fetchall()
+                # Preserve order of skill_ids
+                skill_map = {row[0]: self._row_to_skill(row) for row in rows}
+                return [skill_map[sid] for sid in skill_ids if sid in skill_map]
+        except Exception as e:
+            logger.error(f"Error batch getting skills: {e}")
+            return []
+
+    def _batch_increment_use_counts(self, skill_ids: List[int]):
+        """Increment use counts for multiple skills in a single query."""
+        if not skill_ids:
+            return
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                placeholders = ','.join('?' * len(skill_ids))
+                conn.execute(f"""
+                    UPDATE skills SET use_count = use_count + 1, updated_at = ?
+                    WHERE id IN ({placeholders})
+                """, [datetime.now().isoformat()] + skill_ids)
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Error batch incrementing use counts: {e}")
 
 
 # ── Distillation Functions ──────────────────────────────────────────────────
@@ -403,36 +444,6 @@ CATEGORY: <emotional|cognitive|planning|social>"""
         return _parse_skill_response(response, agent_name, "reflection", True, reflection_text)
     except Exception as e:
         logger.error(f"Error distilling reflection skill: {e}")
-        return None
-
-
-async def distill_plan_skill(
-    agent_name: str,
-    plan_description: str,
-    outcome: str,
-) -> Optional[Skill]:
-    """Distill a planning outcome into a planning/spatial skill."""
-    from llm import get_llm_client
-
-    success = outcome == "success"
-    prompt = f"""Extract a reusable planning skill from this experience.
-
-Agent: {agent_name}
-Plan: {plan_description}
-Outcome: {outcome}
-
-Respond in EXACTLY this format (no extra text):
-NAME: <short skill name, 3-6 words>
-PRINCIPLE: <planning insight, 1 sentence>
-WHEN: <conditions when this applies, 1 sentence>
-CATEGORY: <planning|spatial|cognitive>"""
-
-    try:
-        llm = await get_llm_client()
-        response = await llm.generate(prompt, temperature=0.4, max_tokens=150, task="importance")
-        return _parse_skill_response(response, agent_name, "plan", success, plan_description)
-    except Exception as e:
-        logger.error(f"Error distilling plan skill: {e}")
         return None
 
 

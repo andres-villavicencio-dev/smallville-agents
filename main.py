@@ -344,8 +344,10 @@ class SmallvilleSimulation:
                                 continue
                             agent_pairs_checked.add(pair_key)
                             
-                            # Skip if already in conversation
+                            # Skip if already in conversation or on cooldown
                             if self.conversation_manager.has_active_conversation(agent1, agent2):
+                                continue
+                            if self.conversation_manager.is_on_cooldown(agent1, agent2, self.tick_count):
                                 continue
                             
                             # Check if conversation should start
@@ -396,7 +398,8 @@ class SmallvilleSimulation:
             }
             await self.conversation_manager.update_conversations(
                 memory_streams, skill_banks, 
-                agents=self.agents, current_time=self.current_time
+                agents=self.agents, current_time=self.current_time,
+                current_tick=self.tick_count
             )
             
             # Log any new conversation lines to display
