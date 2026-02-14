@@ -306,13 +306,61 @@ async def decide_action(agent_name: str, situation: str, memories: str = "") -> 
 
 
 async def generate_dialogue(agent_name: str, situation: str, memories: str = "") -> str:
-    """Generate a conversation response using the dialogue pipeline."""
-    committee = get_committee()
-    extra = {}
-    if memories:
-        extra["memory"] = memories
-    raw = await committee.consult("conversation_response", situation, agent_name, extra)
-    return _clean_dialogue(raw, agent_name)
+    """Generate a conversation response using a single cloud LLM call.
+    
+    Replaces the 3-expert pipeline (memory→emotional→dialogue) with one
+    call to Ollama Cloud (qwen3-coder:480b-cloud) for better quality and
+    speed (offloads from local GPU).
+    """
+    cloud_model = os.getenv("DIALOGUE_CLOUD_MODEL", "qwen3-coder:480b-cloud")
+    
+    # Build a merged prompt that covers memory, emotion, and dialogue in one shot
+    memory_context = f"\nRelevant memories:\n{memories}" if memories else ""
+    
+    prompt = (
+        f"You are {agent_name} in a small town called Smallville. "
+        f"You must respond IN CHARACTER as {agent_name}.\n\n"
+        f"Current situation:\n{situation}{memory_context}\n\n"
+        f"Generate {agent_name}'s next line of dialogue. Rules:\n"
+        f"- Output ONLY the spoken words, nothing else\n"
+        f"- 1-2 sentences, natural and in-character\n"
+        f"- No narration, no stage directions, no analysis\n"
+        f"- Do not start with the character's name\n"
+        f"- Consider their emotional state and past experiences"
+    )
+    
+    try:
+        payload = {
+            "model": cloud_model,
+            "messages": [
+                {"role": "user", "content": prompt},
+            ],
+            "stream": False,
+            "options": {
+                "temperature": 0.9,
+                "num_predict": 100,
+            },
+        }
+        
+        _notify_llm_status(agent_name, "dialogue (cloud)", cloud_model)
+        
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json=payload,
+            timeout=60,  # Cloud may be slower
+        )
+        response.raise_for_status()
+        raw = response.json().get("message", {}).get("content", "").strip()
+        return _clean_dialogue(raw, agent_name)
+    except Exception as e:
+        logger.warning(f"Cloud dialogue failed for {agent_name}, falling back to local: {e}")
+        # Fallback to local pipeline
+        committee = get_committee()
+        extra = {}
+        if memories:
+            extra["memory"] = memories
+        raw = await committee.consult("conversation_response", situation, agent_name, extra)
+        return _clean_dialogue(raw, agent_name)
 
 
 def _clean_dialogue(text: str, agent_name: str) -> str:

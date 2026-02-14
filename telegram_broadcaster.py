@@ -186,7 +186,23 @@ class DigestCollector:
         if not has_content:
             return None
 
-        parts = ["🏘 *Smallville Live*\n"]
+        # Read sim time from state file
+        sim_time_str = ""
+        try:
+            state_path = os.path.join(os.path.dirname(__file__), "saves", "latest_state.json")
+            with open(state_path) as f:
+                state = json.load(f)
+            sim_dt = datetime.fromisoformat(state.get("current_time", ""))
+            sim_time_str = sim_dt.strftime("%I:%M %p, %b %d")
+            tick = state.get("tick_count", "?")
+        except Exception:
+            sim_time_str = ""
+            tick = "?"
+
+        header = "🏘 *Smallville Live*"
+        if sim_time_str:
+            header += f" — _{sim_time_str}_ (tick {tick})"
+        parts = [header + "\n"]
 
         # ── Location clusters ──
         if self.locations:
@@ -224,14 +240,29 @@ class DigestCollector:
                 parts.append(f"  {agent} → {desc}")
             parts.append("")
 
-        # ── Conversations ──
+        # ── Conversations (compact summary) ──
         if self.conversations:
-            parts.append(f"💬 *Conversations ({len(self.conversations)}):*")
+            # Group by location
+            conv_by_loc = defaultdict(list)
             for a1, a2, loc, opening, turns in self.conversations:
-                name1 = a1.split()[0]
-                name2 = a2.split()[0]
-                opener = f": _{opening}_" if opening else ""
-                parts.append(f"  {name1} & {name2} @ {loc} ({turns}t){opener}")
+                conv_by_loc[loc].append((a1.split()[0], a2.split()[0], turns))
+            parts.append(f"💬 *{len(self.conversations)} conversations ended:*")
+            for loc, convos in conv_by_loc.items():
+                pairs = ", ".join(f"{a}&{b} ({t}t)" for a, b, t in convos)
+                parts.append(f"  {loc}: {pairs}")
+            parts.append("")
+
+        # ── Active conversations (brief) ──
+        if self.conv_active:
+            active_by_loc = defaultdict(list)
+            for key, conv in self.conv_active.items():
+                active_by_loc[conv["loc"]].append(
+                    f"{conv['a1'].split()[0]}&{conv['a2'].split()[0]}"
+                )
+            active_parts = []
+            for loc, pairs in active_by_loc.items():
+                active_parts.append(f"{loc}: {', '.join(pairs)}")
+            parts.append(f"🗣 *{len(self.conv_active)} active:* {'; '.join(active_parts)}")
             parts.append("")
 
         # ── Reflections ──

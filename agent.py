@@ -211,21 +211,13 @@ class GenerativeAgent:
             # Parse the response into plan items
             plan_items = await self._parse_daily_plan(response, date)
             
-            # Decompose broad activities into specific actions
-            detailed_plan = []
-            for item in plan_items:
-                if item.duration_minutes > 30:  # Decompose longer activities
-                    sub_actions = await self._decompose_plan_item(item)
-                    detailed_plan.extend(sub_actions)
-                else:
-                    detailed_plan.append(item)
-            
-            self.daily_plan = detailed_plan
+            # Skip decomposition for speed — 120s ticks don't need 5-min granularity
+            self.daily_plan = plan_items
             
             # Store plan in memory
             plan_description = f"My plan for {date_str}: " + "; ".join([
                 f"{item.description} at {item.start_time.strftime('%H:%M')}"
-                for item in detailed_plan[:5]  # First 5 items
+                for item in plan_items[:5]  # First 5 items
             ])
             
             plan_memory = Memory(
@@ -237,8 +229,8 @@ class GenerativeAgent:
             )
             self.memory_stream.add_memory(plan_memory)
             
-            logger.info(f"{self.name} planned day with {len(detailed_plan)} activities")
-            return detailed_plan
+            logger.info(f"{self.name} planned day with {len(plan_items)} activities")
+            return plan_items
         
         except Exception as e:
             logger.error(f"Error planning daily schedule for {self.name}: {e}")
