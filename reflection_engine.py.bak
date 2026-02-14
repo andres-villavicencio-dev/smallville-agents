@@ -188,47 +188,14 @@ class SingleModelPlanning(PlanningStrategy):
 
     async def plan_day(self, agent: 'GenerativeAgent', date) -> str:
         """Generate daily plan using single model."""
-        from personas import format_agent_description, get_agent_persona
-
-        # Fix 2: Use retrieve_memories() with focal points instead of get_memories()
-        events_query = f"What events or social gatherings are happening? {agent.name}"
-        plans_query = f"What are {agent.name}'s plans and commitments?"
-        
-        events_memories = agent.memory_stream.retrieve_memories(events_query, top_k=10)
-        plans_memories = agent.memory_stream.retrieve_memories(plans_query, top_k=10)
-        
-        # Merge and deduplicate relevant memories
-        all_relevant = list(events_memories) + list(plans_memories)
-        seen_ids = set()
-        unique_memories = []
-        for mem, score in all_relevant:
-            if mem.id not in seen_ids:
-                unique_memories.append(mem)
-                seen_ids.add(mem.id)
-        
-        memories_text = "\n".join(f"- {m.description}" for m in unique_memories[:15])
+        from personas import format_agent_description
 
         llm = await get_llm_client()
         agent_description = format_agent_description(agent.name)
         date_str = date.strftime("%A, %B %d, %Y")
 
-        persona = get_agent_persona(agent.name)
-        home = persona.get("home_location", "Lin Family Home")
-        work = persona.get("work_location", "Oak Hill College")
-        lunch_location = persona.get("lunch_location", "Hobbs Cafe")
-        errand_locations = persona.get("errand_locations", ["Library", "Johnson Park", "Harvey Oak Supply Store"])
-
-        # Fix 1: Create enhanced prompt without hardcoded locations
-        enhanced_context = (
-            f"Relevant memories and events:\n{memories_text}\n\n"
-            f"Home: {home}. Work: {work}.\n"
-            f"Suggested lunch location: {lunch_location}.\n"
-            f"Suggested errand locations: {', '.join(errand_locations)}.\n"
-            f"Consider your memories and any important events when planning."
-        )
-
         return await llm.generate_daily_plan(
-            agent.name, agent_description, date_str, context=enhanced_context
+            agent.name, agent_description, date_str
         )
 
 
@@ -243,23 +210,8 @@ class CommitteePlanning(PlanningStrategy):
         from committee import plan_day as committee_plan
         from personas import format_agent_description
 
-        # Fix 2: Use retrieve_memories() with focal points instead of get_memories()
-        events_query = f"What events or social gatherings are happening? {agent.name}"
-        plans_query = f"What are {agent.name}'s plans and commitments?"
-        
-        events_memories = agent.memory_stream.retrieve_memories(events_query, top_k=10)
-        plans_memories = agent.memory_stream.retrieve_memories(plans_query, top_k=10)
-        
-        # Merge and deduplicate relevant memories
-        all_relevant = list(events_memories) + list(plans_memories)
-        seen_ids = set()
-        unique_memories = []
-        for mem, score in all_relevant:
-            if mem.id not in seen_ids:
-                unique_memories.append(mem)
-                seen_ids.add(mem.id)
-        
-        memories_text = "\n".join(f"- {m.description}" for m in unique_memories[:15])
+        recent_memories = agent.memory_stream.get_memories(limit=20)
+        memories_text = "\n".join(f"- {m.description}" for m in recent_memories)
 
         agent_description = format_agent_description(agent.name)
         date_str = date.strftime("%A, %B %d, %Y")
@@ -268,24 +220,19 @@ class CommitteePlanning(PlanningStrategy):
         persona = get_agent_persona(agent.name)
         home = persona.get("home_location", "Lin Family Home")
         work = persona.get("work_location", "Oak Hill College")
-        lunch_location = persona.get("lunch_location", "Hobbs Cafe")
-        errand_locations = persona.get("errand_locations", ["Library", "Johnson Park", "Harvey Oak Supply Store"])
 
-        # Fix 1: Remove hardcoded lunch locations and let agents choose organically
         situation = (
             f"{agent_description}\n"
             f"Date: {date_str}\n"
             f"Home: {home}. Work: {work}.\n"
-            f"Suggested lunch location: {lunch_location}.\n"
-            f"Suggested errand locations: {', '.join(errand_locations)}.\n"
             f"Generate a realistic daily schedule for {agent.name} with exactly 8 activities.\n"
-            f"Consider your memories and any important events or plans:\n"
-            f"{memories_text}\n\n"
-            f"STRUCTURE GUIDELINES:\n"
-            f"- Include a lunch break (12:00-1:00 PM) at a suitable location\n"
-            f"- Include at least one errand or social visit to explore the town\n"
-            f"- Morning routine at home, then work/activities, lunch, more activities, evening at home\n"
-            f"- Choose locations that make sense based on your memories, personality, and any events happening\n"
+            f"IMPORTANT RULES:\n"
+            f"- Include a lunch break (12:00-1:00 PM) at Hobbs Cafe, The Rose and Crown Pub, or Johnson Park\n"
+            f"- Include at least one errand or social visit to a DIFFERENT location from work "
+            f"(e.g., Hobbs Cafe for coffee, Library to browse, Johnson Park for a walk, "
+            f"Harvey Oak Supply Store for supplies, Town Hall for business)\n"
+            f"- Morning at home (wake up, breakfast), then go to work, lunch out, back to work, "
+            f"errand/social visit, then home for evening\n"
             f"Format each line as: TIME AM/PM - activity at LOCATION\n"
             f"Example: 8:00 AM - open the pharmacy for the day at Pharmacy\n"
             f"Example: 12:30 PM - have lunch and catch up with friends at Hobbs Cafe"
@@ -335,8 +282,7 @@ class SingleModelConversation(ConversationStrategy):
         """Determine if should start conversation (single model)."""
         from prompts import CONVERSATION_INITIATION_PROMPT
 
-        # Fix 4: Broaden query to include events and parties
-        query = f"{target} plans events party invite {initiator} activities conversation talking"
+        query = f"conversation with {target} or {target} or talking"
         relevant_memories = memory_stream.retrieve_memories(query, top_k=5)
         memory_descriptions = [mem[0].description for mem in relevant_memories]
 
@@ -359,8 +305,7 @@ class SingleModelConversation(ConversationStrategy):
         from prompts import CONVERSATION_RESPONSE_PROMPT
         from personas import format_agent_description, get_agent_persona
 
-        # Fix 5: Broaden query to include events and parties
-        query = f"{other_agent} events plans party invite activities conversation"
+        query = f"conversation with {other_agent} or {other_agent}"
         relevant_memories = memory_stream.retrieve_memories(query, top_k=8)
         memory_descriptions = [mem[0].description for mem in relevant_memories]
 
@@ -390,8 +335,7 @@ class CommitteeConversation(ConversationStrategy):
         """Determine if should start conversation (committee)."""
         from committee import should_converse as committee_should_converse
 
-        # Fix 4: Broaden query to include events and parties
-        query = f"{target} plans events party invite {initiator} activities conversation talking"
+        query = f"conversation with {target} or {target} or talking"
         relevant_memories = memory_stream.retrieve_memories(query, top_k=5)
         memory_descriptions = [mem[0].description for mem in relevant_memories]
 
@@ -414,8 +358,7 @@ class CommitteeConversation(ConversationStrategy):
         persona = get_agent_persona(speaker)
         personality = persona.get("personality", "friendly")
 
-        # Fix 5: Broaden query to include events and parties
-        query = f"{other_agent} events plans party invite activities conversation"
+        query = f"conversation with {other_agent} or {other_agent}"
         relevant_memories = memory_stream.retrieve_memories(query, top_k=8)
         memory_descriptions = [mem[0].description for mem in relevant_memories]
 

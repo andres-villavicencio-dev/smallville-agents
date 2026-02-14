@@ -167,8 +167,8 @@ class ConversationManager:
                                        location: str, memory_stream: MemoryStream) -> str:
         """Generate an opening conversation message."""
         try:
-            # Fix 4: Broaden query to include events and parties
-            query = f"{target} plans events party invite {speaker} activities"
+            # Get relevant memories
+            query = f"recent activities plans {target}"
             relevant_memories = memory_stream.retrieve_memories(query, top_k=5)
             memory_descriptions = [mem[0].description for mem in relevant_memories[-3:]]
             
@@ -240,8 +240,16 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
                                             memory_stream: MemoryStream) -> str:
         """Generate a conversation response."""
         try:
+            # Get relevant memories
+            query = f"conversation with {other_agent} or {other_agent}"
+            relevant_memories = memory_stream.retrieve_memories(query, top_k=8)
+            memory_descriptions = [mem[0].description for mem in relevant_memories]
+            
+            # Get persona info
+            persona = get_agent_persona(speaker)
+            personality = persona.get("personality", "friendly")
+
             # Use conversation engine (handles committee vs single-model)
-            # Note: The query fix is already implemented in the conversation engine methods
             conv_engine = ConversationEngine.get_engine()
             return await conv_engine.generate_response(speaker, other_agent, conversation, memory_stream)
             

@@ -156,10 +156,14 @@ class OllamaClient:
         return await self.generate(prompt, temperature=0.7, max_tokens=150, task="reflection", agent_name=agent_name)
     
     async def generate_daily_plan(self, agent_name: str, agent_description: str,
-                                 current_date: str) -> str:
+                                 current_date: str, context: str = "") -> str:
         """Generate a daily plan for an agent."""
+        enhanced_description = agent_description
+        if context:
+            enhanced_description = f"{agent_description}\n\n{context}"
+            
         prompt = DAILY_PLANNING_PROMPT.format(
-            agent_description=agent_description,
+            agent_description=enhanced_description,
             agent_name=agent_name,
             date=current_date
         )

@@ -275,28 +275,6 @@ class SmallvilleSimulation:
     async def _simulation_step(self):
         """Execute one simulation step."""
         try:
-            # Fix 3: Check if a new simulation day has started (8:00 AM) and trigger re-planning
-            # Skip tick 0 — agents already planned during initialize()
-            if self.tick_count > 0 and self.current_time.hour == 8 and self.current_time.minute == 0 and self.current_time.second < self.tick_duration:
-                # New day detected! Re-plan all agents to incorporate yesterday's memories
-                self.display.add_event(f"🌅 New day started: {self.current_time.strftime('%A, %B %d, %Y')} - Re-planning all agents...")
-                logger.info(f"New simulation day detected at {self.current_time}, triggering re-planning for all agents")
-                
-                # Re-plan all agents in parallel to incorporate memories from previous day conversations
-                plan_tasks = []
-                for agent in self.agents.values():
-                    logger.info(f"Re-planning {agent.name} for new day with fresh memories")
-                    plan_tasks.append(agent.plan_daily_schedule(self.current_time))
-                
-                try:
-                    await asyncio.gather(*plan_tasks)
-                    self.display.add_event(f"✅ All {len(self.agents)} agents re-planned for the new day")
-                    logger.info(f"Successfully re-planned all {len(self.agents)} agents for new day")
-                    self.stats["total_plans"] += len(self.agents)
-                except Exception as e:
-                    logger.error(f"Error during daily re-planning: {e}")
-                    self.display.add_event(f"❌ Error during daily re-planning: {str(e)}")
-
             # 1. Update agent activities based on plans
             for agent in self.agents.values():
                 new_activity = agent.update_current_activity(self.current_time)
