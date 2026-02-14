@@ -16,17 +16,18 @@ from prompts import DAILY_PLANNING_PROMPT
 
 logger = logging.getLogger(__name__)
 
-# Location inference mappings
+# Location inference mappings — keys must match SMALLVILLE_LOCATIONS in config.py
 LOCATION_KEYWORDS = {
-    "home": ["wake up", "shower", "breakfast", "sleep", "bed"],
-    "work": ["work", "open", "customers", "teach", "class"],
-    "pharmacy": ["pharmacy", "medicine"],
-    "cafe": ["cafe", "coffee", "hobbs"],
-    "library": ["library", "books", "study"],
-    "park": ["park", "walk", "exercise"],
-    "pub": ["pub", "drink"],
-    "store": ["store", "hardware", "supplies"],
-    "town hall": ["town hall", "meeting", "mayor"],
+    "home": ["wake up", "shower", "breakfast", "sleep", "bed", "morning routine", "get dressed", "evening", "dinner at home", "relax at home"],
+    "work": ["work", "open", "customers", "teach", "class", "shift", "office"],
+    "Pharmacy": ["pharmacy", "medicine", "prescriptions"],
+    "Hobbs Cafe": ["cafe", "coffee", "hobbs", "lunch", "pastries", "brunch", "catch up with"],
+    "Library": ["library", "books", "read", "browse books", "study"],
+    "Johnson Park": ["park", "walk", "exercise", "jog", "stroll", "fresh air", "bench"],
+    "The Rose and Crown Pub": ["pub", "drink", "beer", "bar", "rose and crown", "evening drink"],
+    "Harvey Oak Supply Store": ["hardware", "supplies", "supply store", "harvey oak", "tools"],
+    "Town Hall": ["town hall", "city hall", "meeting", "mayor", "civic", "council"],
+    "Oak Hill College": ["college", "campus", "lecture", "seminar", "classroom"],
 }
 
 # Default locations for home/work
@@ -118,19 +119,24 @@ class PlanParser:
             activity: Activity description text
 
         Returns:
-            Inferred location name
+            Inferred location name matching SMALLVILLE_LOCATIONS keys
         """
         activity_lower = activity.lower()
 
-        # Check each location category
+        # First: check if a known location name appears explicitly in the text
+        from config import SMALLVILLE_LOCATIONS
+        for loc_name in SMALLVILLE_LOCATIONS:
+            if loc_name.lower() in activity_lower:
+                return loc_name
+
+        # Second: keyword matching
         for location, keywords in LOCATION_KEYWORDS.items():
             if any(word in activity_lower for word in keywords):
                 if location == "home":
                     return self.default_home
                 elif location == "work":
                     return self.default_work
-                # Capitalize other locations
-                return location.title() if location != location.lower() else location.capitalize()
+                return location  # Already proper case in the dict
 
         # Default to work
         return self.default_work

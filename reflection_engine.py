@@ -216,11 +216,26 @@ class CommitteePlanning(PlanningStrategy):
         agent_description = format_agent_description(agent.name)
         date_str = date.strftime("%A, %B %d, %Y")
 
+        from personas import get_agent_persona
+        persona = get_agent_persona(agent.name)
+        home = persona.get("home_location", "Lin Family Home")
+        work = persona.get("work_location", "Oak Hill College")
+
         situation = (
             f"{agent_description}\n"
             f"Date: {date_str}\n"
-            f"Generate a detailed daily schedule for {agent.name} with 6-8 activities, "
-            f"including times and locations. Format: time - activity at location"
+            f"Home: {home}. Work: {work}.\n"
+            f"Generate a realistic daily schedule for {agent.name} with exactly 8 activities.\n"
+            f"IMPORTANT RULES:\n"
+            f"- Include a lunch break (12:00-1:00 PM) at Hobbs Cafe, The Rose and Crown Pub, or Johnson Park\n"
+            f"- Include at least one errand or social visit to a DIFFERENT location from work "
+            f"(e.g., Hobbs Cafe for coffee, Library to browse, Johnson Park for a walk, "
+            f"Harvey Oak Supply Store for supplies, Town Hall for business)\n"
+            f"- Morning at home (wake up, breakfast), then go to work, lunch out, back to work, "
+            f"errand/social visit, then home for evening\n"
+            f"Format each line as: TIME AM/PM - activity at LOCATION\n"
+            f"Example: 8:00 AM - open the pharmacy for the day at Pharmacy\n"
+            f"Example: 12:30 PM - have lunch and catch up with friends at Hobbs Cafe"
         )
 
         return await committee_plan(
