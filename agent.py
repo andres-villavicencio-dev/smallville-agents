@@ -214,10 +214,10 @@ class GenerativeAgent:
             # Skip decomposition for speed — 120s ticks don't need 5-min granularity
             self.daily_plan = plan_items
             
-            # Store plan in memory
+            # Store plan in memory (full plan, not truncated)
             plan_description = f"My plan for {date_str}: " + "; ".join([
-                f"{item.description} at {item.start_time.strftime('%H:%M')}"
-                for item in plan_items[:5]  # First 5 items
+                f"{item.start_time.strftime('%I:%M %p')} - {item.description} at {item.location}"
+                for item in plan_items
             ])
             
             plan_memory = Memory(
@@ -462,12 +462,8 @@ class GenerativeAgent:
         """React to a completed conversation by potentially modifying the daily plan.
         Returns True if the plan was modified."""
         logger.info(f"[replan] {self.name} evaluating plan after talking to {other_agent}")
-        # Cap re-plans to avoid churn
-        if not hasattr(self, '_replan_count'):
-            self._replan_count = 0
-        if self._replan_count >= 3:
-            logger.info(f"[replan] {self.name} hit re-plan cap, skipping")
-            return False
+        # No re-plan cap — agents should be free to reschedule organically
+        # (Exp 2 showed the cap suppressed party attendance emergence)
         
         # Get remaining plan items
         remaining = [item for item in self.daily_plan 
@@ -518,7 +514,6 @@ class GenerativeAgent:
             
             # Insert into plan: remove conflicting items, add new one
             self._inject_plan_item(new_item)
-            self._replan_count += 1
             
             # Store memory about the decision
             memory = Memory(

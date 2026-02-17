@@ -218,13 +218,25 @@ class SingleModelPlanning(PlanningStrategy):
         lunch_location = persona.get("lunch_location", "Hobbs Cafe")
         errand_locations = persona.get("errand_locations", ["Library", "Johnson Park", "Harvey Oak Supply Store"])
 
-        # Fix 1: Create enhanced prompt without hardcoded locations
+        # Fix C: Extract event commitments from memories
+        fixed_commitments = CommitteePlanning._extract_event_commitments(unique_memories, agent.name)
+        commitments_block = ""
+        if fixed_commitments:
+            commitments_block = (
+                "\nFIXED COMMITMENTS (these MUST appear in the schedule at the specified times):\n"
+                + "\n".join(f"- {c}" for c in fixed_commitments)
+                + "\nPlan other activities AROUND these fixed events.\n"
+            )
+
+        # Fix B: Full-day prompt structure
         enhanced_context = (
-            f"Relevant memories and events:\n{memories_text}\n\n"
+            f"Relevant memories and events:\n{memories_text}\n"
+            f"{commitments_block}\n"
             f"Home: {home}. Work: {work}.\n"
             f"Suggested lunch location: {lunch_location}.\n"
             f"Suggested errand locations: {', '.join(errand_locations)}.\n"
-            f"Consider your memories and any important events when planning."
+            f"Generate a FULL daily schedule covering 6:00 AM to 10:00 PM.\n"
+            f"MUST include MORNING (6-12), AFTERNOON (12-5), and EVENING (5-10) activities."
         )
 
         return await llm.generate_daily_plan(
@@ -271,29 +283,109 @@ class CommitteePlanning(PlanningStrategy):
         lunch_location = persona.get("lunch_location", "Hobbs Cafe")
         errand_locations = persona.get("errand_locations", ["Library", "Johnson Park", "Harvey Oak Supply Store"])
 
-        # Fix 1: Remove hardcoded lunch locations and let agents choose organically
+        # Fix C: Extract high-importance event memories and inject as fixed commitments
+        fixed_commitments = self._extract_event_commitments(unique_memories, agent.name)
+        commitments_block = ""
+        if fixed_commitments:
+            commitments_block = (
+                "\nFIXED COMMITMENTS (these MUST appear in the schedule at the specified times):\n"
+                + "\n".join(f"- {c}" for c in fixed_commitments)
+                + "\nPlan other activities AROUND these fixed events.\n"
+            )
+
+        # Fix B: Restructured prompt requiring full-day coverage 6AM-10PM
         situation = (
             f"{agent_description}\n"
             f"Date: {date_str}\n"
             f"Home: {home}. Work: {work}.\n"
             f"Suggested lunch location: {lunch_location}.\n"
             f"Suggested errand locations: {', '.join(errand_locations)}.\n"
-            f"Generate a realistic daily schedule for {agent.name} with exactly 8 activities.\n"
-            f"Consider your memories and any important events or plans:\n"
-            f"{memories_text}\n\n"
-            f"STRUCTURE GUIDELINES:\n"
-            f"- Include a lunch break (12:00-1:00 PM) at a suitable location\n"
-            f"- Include at least one errand or social visit to explore the town\n"
-            f"- Morning routine at home, then work/activities, lunch, more activities, evening at home\n"
-            f"- Choose locations that make sense based on your memories, personality, and any events happening\n"
-            f"Format each line as: TIME AM/PM - activity at LOCATION\n"
-            f"Example: 8:00 AM - open the pharmacy for the day at Pharmacy\n"
-            f"Example: 12:30 PM - have lunch and catch up with friends at Hobbs Cafe"
+            f"Relevant memories and events:\n{memories_text}\n"
+            f"{commitments_block}\n"
+            f"Generate a FULL daily schedule for {agent.name} covering 6:00 AM to 10:00 PM.\n"
+            f"The schedule MUST include ALL three periods:\n"
+            f"  MORNING (6:00 AM - 12:00 PM): Wake up, morning routine, work/activities\n"
+            f"  AFTERNOON (12:00 PM - 5:00 PM): Lunch, errands, social visits\n"
+            f"  EVENING (5:00 PM - 10:00 PM): Events, dinner, leisure, return home\n\n"
+            f"Output exactly 8-10 lines. Format each line as:\n"
+            f"TIME AM/PM - activity at LOCATION\n"
+            f"Example:\n"
+            f"6:00 AM - wake up and morning routine at {home}\n"
+            f"8:00 AM - open the pharmacy for the day at Pharmacy\n"
+            f"12:00 PM - have lunch at Hobbs Cafe\n"
+            f"5:00 PM - attend community event at Johnson Park\n"
+            f"9:00 PM - wind down and prepare for bed at {home}"
         )
 
         return await committee_plan(
             agent.name, situation, memories=memories_text
         )
+
+    @staticmethod
+    def _extract_event_commitments(memories, agent_name: str) -> list:
+        """Extract time-specific events from high-importance memories to use as schedule anchors.
+        
+        Looks for memories about parties, events, gatherings etc. that have specific
+        times mentioned. Returns them as fixed commitment strings for the planner.
+        """
+        import re
+        from config import SMALLVILLE_LOCATIONS
+        
+        commitments = []
+        event_keywords = ['party', 'celebration', 'festival', 'gathering', 'event', 'ceremony', 'concert']
+        # Match times like "5 PM", "5:00 PM", "5-7 PM", "5:00 PM - 7:00 PM"
+        # Also handles "5-7 PM" where only the end has AM/PM
+        time_pattern = re.compile(
+            r'(\d{1,2}(?::\d{2})?)\s*(?:AM|PM|am|pm)?'
+            r'\s*[-–to]+\s*'
+            r'(\d{1,2}(?::\d{2})?)\s*(AM|PM|am|pm)'
+        )
+        # Simpler pattern for single times like "at 3:00 PM"
+        single_time_pattern = re.compile(
+            r'(\d{1,2}(?::\d{2})?)\s*(AM|PM|am|pm)'
+        )
+        
+        known_locations = set(SMALLVILLE_LOCATIONS.keys())
+        
+        for mem in memories:
+            desc_lower = mem.description.lower()
+            # Only consider high-importance event memories
+            if mem.importance_score < 6:
+                continue
+            if not any(kw in desc_lower for kw in event_keywords):
+                continue
+            
+            # Try to extract a time range first (e.g. "5-7 PM"), then single time
+            range_match = time_pattern.search(mem.description)
+            if range_match:
+                start_num = range_match.group(1).strip()
+                end_num = range_match.group(2).strip()
+                ampm = range_match.group(3).upper()
+                time_str = f"{start_num} {ampm}"  # Use start time as the anchor
+            else:
+                single_match = single_time_pattern.search(mem.description)
+                if not single_match:
+                    continue
+                time_str = f"{single_match.group(1)} {single_match.group(2).upper()}"
+            
+            # Extract location: match known Smallville locations
+            location = ""
+            for loc in known_locations:
+                if loc.lower() in desc_lower:
+                    location = loc
+                    break
+            
+            # Build a clean event name from the keywords found
+            event_type = next((kw for kw in event_keywords if kw in desc_lower), "event")
+            # Capitalize nicely
+            event_name = f"Valentine's Day {event_type}" if 'valentine' in desc_lower else event_type.title()
+            
+            commitment = f"{time_str} - Attend {event_name} at {location}" if location else f"{time_str} - Attend {event_name}"
+            
+            if commitment not in commitments:
+                commitments.append(commitment)
+        
+        return commitments[:3]  # Max 3 fixed commitments to leave room for organic planning
 
 
 class PlanningEngine:
@@ -429,7 +521,8 @@ class CommitteeConversation(ConversationStrategy):
                         if memory_descriptions else "No relevant memories")
 
         response = await generate_dialogue(speaker, situation,
-                                           memories=memories_text)
+                                           memories=memories_text,
+                                           talking_to=other_agent)
         return response.strip() if response else "I see."
 
 

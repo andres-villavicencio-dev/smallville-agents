@@ -32,7 +32,7 @@ class ExpertConfig:
 EXPERTS = {
     "social": ExpertConfig(
         name="Social",
-        model=os.getenv("COMMITTEE_MODEL_SOCIAL", "llama3.2:3b"),
+        model=os.getenv("COMMITTEE_MODEL_SOCIAL", "smallville-social"),
         role=(
             "You are a social reasoning expert. You analyze relationships, social norms, "
             "and interpersonal dynamics. Given a situation, assess: Who should this person "
@@ -124,6 +124,11 @@ PIPELINES = {
     "reflect": ["memory", "emotional", "judge"],
 }
 
+# Per-pipeline token overrides for the final expert (e.g. judge needs more room for plans)
+PIPELINE_TOKEN_OVERRIDES = {
+    "plan_day": {"judge": 500},
+}
+
 
 import requests
 
@@ -189,9 +194,13 @@ class Committee:
             if self._shutdown_flag:
                 break
 
+            # Apply per-pipeline token overrides (e.g. judge needs more tokens for plans)
+            token_overrides = PIPELINE_TOKEN_OVERRIDES.get(pipeline_name, {})
+            effective_max_tokens = token_overrides.get(expert_key, expert.max_tokens)
+
             # Notify display & call the model
             _notify_llm_status(agent_name, f"{expert.name} expert", expert.model)
-            output = await self._call_model(expert, prompt)
+            output = await self._call_model(expert, prompt, max_tokens_override=effective_max_tokens)
             if output:
                 expert_outputs[expert_key] = output
                 logger.debug(f"[{agent_name}] {expert.name} expert: {output[:80]}...")
@@ -236,9 +245,10 @@ class Committee:
 
         return "\n".join(parts)
 
-    async def _call_model(self, expert: ExpertConfig, prompt: str) -> str:
+    async def _call_model(self, expert: ExpertConfig, prompt: str, max_tokens_override: int = None) -> str:
         """Call an Ollama model. Sequential — one at a time for VRAM."""
         try:
+            effective_max_tokens = max_tokens_override if max_tokens_override is not None else expert.max_tokens
             payload = {
                 "model": expert.model,
                 "messages": [
@@ -248,7 +258,7 @@ class Committee:
                 "stream": False,
                 "options": {
                     "temperature": expert.temperature,
-                    "num_predict": expert.max_tokens,
+                    "num_predict": effective_max_tokens,
                 },
             }
 
@@ -305,18 +315,114 @@ async def decide_action(agent_name: str, situation: str, memories: str = "") -> 
     return await committee.consult("decide_action", situation, agent_name, extra)
 
 
-async def generate_dialogue(agent_name: str, situation: str, memories: str = "") -> str:
-    """Generate a conversation response using a single cloud LLM call.
+def _load_character_profiles() -> Dict[str, Dict]:
+    """Load all YAML character profiles once and cache them."""
+    profiles_dir = os.path.join(os.path.dirname(__file__), "finetune", "profiles")
+    profiles = {}
+    if not os.path.isdir(profiles_dir):
+        logger.warning(f"Character profiles directory not found: {profiles_dir}")
+        return profiles
+    import yaml
+    for fname in os.listdir(profiles_dir):
+        if not fname.endswith(".yaml"):
+            continue
+        try:
+            with open(os.path.join(profiles_dir, fname)) as f:
+                p = yaml.safe_load(f)
+            if p and "name" in p:
+                profiles[p["name"]] = p
+        except Exception as e:
+            logger.warning(f"Failed to load profile {fname}: {e}")
+    logger.info(f"Loaded {len(profiles)} character profiles for dialogue")
+    return profiles
+
+
+_CHARACTER_PROFILES: Optional[Dict[str, Dict]] = None
+
+
+def _get_character_profiles() -> Dict[str, Dict]:
+    global _CHARACTER_PROFILES
+    if _CHARACTER_PROFILES is None:
+        _CHARACTER_PROFILES = _load_character_profiles()
+    return _CHARACTER_PROFILES
+
+
+def _build_character_system_prompt(agent_name: str, talking_to: str = "someone", mood: str = "neutral") -> Optional[str]:
+    """Build the [AGENT:] bracket system prompt the fine-tuned model was trained on."""
+    profiles = _get_character_profiles()
+    p = profiles.get(agent_name)
+    if not p:
+        return None
     
-    Replaces the 3-expert pipeline (memory→emotional→dialogue) with one
-    call to Ollama Cloud (qwen3-coder:480b-cloud) for better quality and
-    speed (offloads from local GPU).
+    quirks = p.get("quirks", [])
+    quirks_str = " | ".join(quirks[:3]) if isinstance(quirks, list) else str(quirks)
+    catchphrases = p.get("catchphrases", [])
+    catch_str = " | ".join(catchphrases[:3]) if isinstance(catchphrases, list) else str(catchphrases)
+    
+    return (
+        f"[AGENT: {p['name']}]\n"
+        f"[AGE: {p.get('age', '?')}] [OCCUPATION: {p.get('occupation', '?')}]\n"
+        f"[SPEECH: {p.get('speech_style', 'natural')}]\n"
+        f"[VOCABULARY: {p.get('vocabulary_level', 'average')}]\n"
+        f"[CATCHPHRASES: {catch_str}]\n"
+        f"[SENTENCE_LENGTH: {p.get('sentence_length', 'medium')}]\n"
+        f"[MOOD: {mood}]\n"
+        f"[TALKING_TO: {talking_to}]\n"
+        f"[HUMOR: {p.get('humor_style', 'situational')}]\n"
+        f"[QUIRKS: {quirks_str}]"
+    )
+
+
+async def generate_dialogue(agent_name: str, situation: str, memories: str = "",
+                            talking_to: str = "someone", mood: str = "neutral") -> str:
+    """Generate a conversation response using the fine-tuned character actor model.
+    
+    Primary: smallville-actor (fine-tuned gemma-2-2b, character-specific voices)
+    Fallback: cloud model (qwen3-coder:480b-cloud) for generic dialogue
     """
+    actor_model = os.getenv("DIALOGUE_ACTOR_MODEL", "smallville-actor")
     cloud_model = os.getenv("DIALOGUE_CLOUD_MODEL", "qwen3-coder:480b-cloud")
     
-    # Build a merged prompt that covers memory, emotion, and dialogue in one shot
     memory_context = f"\nRelevant memories:\n{memories}" if memories else ""
     
+    # Try fine-tuned character actor first
+    system_prompt = _build_character_system_prompt(agent_name, talking_to, mood)
+    
+    if system_prompt:
+        try:
+            user_prompt = f"{situation}{memory_context}"
+            
+            payload = {
+                "model": actor_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "stream": False,
+                "options": {
+                    "temperature": 0.8,
+                    "top_p": 0.9,
+                    "repeat_penalty": 1.1,
+                    "num_predict": 150,
+                },
+            }
+            
+            _notify_llm_status(agent_name, "dialogue (actor)", actor_model)
+            
+            response = requests.post(
+                f"{OLLAMA_BASE_URL}/api/chat",
+                json=payload,
+                timeout=30,
+            )
+            response.raise_for_status()
+            raw = response.json().get("message", {}).get("content", "").strip()
+            if raw and len(raw) > 5:
+                return _clean_dialogue(raw, agent_name)
+            logger.warning(f"Actor model returned empty/short response for {agent_name}, falling back")
+        except Exception as e:
+            logger.warning(f"Actor model failed for {agent_name}: {e}, falling back to cloud")
+    
+    # Fallback: cloud model with generic prompt
     prompt = (
         f"You are {agent_name} in a small town called Smallville. "
         f"You must respond IN CHARACTER as {agent_name}.\n\n"
@@ -347,14 +453,13 @@ async def generate_dialogue(agent_name: str, situation: str, memories: str = "")
         response = requests.post(
             f"{OLLAMA_BASE_URL}/api/chat",
             json=payload,
-            timeout=60,  # Cloud may be slower
+            timeout=60,
         )
         response.raise_for_status()
         raw = response.json().get("message", {}).get("content", "").strip()
         return _clean_dialogue(raw, agent_name)
     except Exception as e:
-        logger.warning(f"Cloud dialogue failed for {agent_name}, falling back to local: {e}")
-        # Fallback to local pipeline
+        logger.warning(f"Cloud dialogue also failed for {agent_name}: {e}, using local fallback")
         committee = get_committee()
         extra = {}
         if memories:

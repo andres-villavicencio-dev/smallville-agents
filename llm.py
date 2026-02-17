@@ -168,7 +168,7 @@ class OllamaClient:
             date=current_date
         )
 
-        response = await self.generate(prompt, temperature=0.8, max_tokens=300, task="planning")
+        response = await self.generate(prompt, temperature=0.8, max_tokens=500, task="planning")
         return response
     
     async def decompose_plan_item(self, agent_name: str, plan_item: str, 
