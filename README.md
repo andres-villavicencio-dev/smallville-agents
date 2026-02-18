@@ -1,4 +1,4 @@
-# Generative Agents: Interactive Simulacra of Human Behavior
+# Paper Result Reproduction - Generative Agents: Interactive Simulacra of Human Behavior
 
 A faithful implementation of the Stanford paper "Generative Agents: Interactive Simulacra of Human Behavior" (arXiv:2304.03442) using local Ollama models instead of OpenAI.
 
