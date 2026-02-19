@@ -68,11 +68,72 @@ main.py (SmallvilleSimulation)  — orchestrates tick loop, init, save/load, shu
 
 **GPU queue integration** (`llm.py`): Routes LLM calls through `../gpu-queue/queue_manager.py` with Pi 5 fallback (gemma3:1b). Disable with `--no-gpu-queue`.
 
+## Committee Mode (Mixture of Experts)
+
+Enabled with `--committee` or `USE_COMMITTEE=1`. Instead of one model per task, decisions flow through specialized experts sequentially (8GB VRAM constraint — one model at a time, Ollama handles swapping).
+
+**7 experts** defined in `committee.py`:
+| Expert | Default Model | Role |
+|--------|--------------|------|
+| Social | `smallville-social` (fine-tuned) | Relationships, social norms, interpersonal dynamics |
+| Spatial | `qwen2.5:3b` | Locations, movement, where to go next |
+| Temporal | `gemma3:1b` | Time-of-day, scheduling, urgency |
+| Emotional | `llama3.2:3b` | Mood, personality, emotional states |
+| Memory | `gemma3:4b` | Memory retrieval context and relevance |
+| Dialogue | `smallville-actor` (fine-tuned) | Character voice and conversation |
+| Judge | `qwen2.5:3b` | Synthesizes expert outputs into final action |
+
+Override any expert model via env: `COMMITTEE_MODEL_SOCIAL=other:model`
+
+**5 pipelines** route different decision types through relevant expert subsets: `decide_action`, `conversation_response`, `should_converse`, `plan_day`, `reflect`.
+
+## Fine-Tuned Models
+
+Two custom models trained via QLoRA on Gemma 2 2B (`unsloth/gemma-2-2b-it`):
+
+1. **`smallville-social`** — Social reasoning expert (202 examples, 7 categories of social scenarios across all 25 agents)
+2. **`smallville-actor`** — Dialogue expert (177 examples, distinctive character voices)
+
+### Fine-Tuning Pipeline (`finetune/`)
+
+```bash
+# Generate training data programmatically
+python finetune/generate_social_data.py    # → data/social_expert_training.jsonl
+python finetune/generate_training_data.py  # → data/actor_training.jsonl
+
+# Train (requires unsloth + trl, ~1 min per 50 examples on RTX 3070)
+python finetune/train_social.py            # → output-social/
+python finetune/train.py                   # → output/
+
+# Export: two-step because direct GGUF OOMs on 8GB VRAM
+python finetune/export_gguf.py             # save_pretrained_merged → convert_hf_to_gguf.py → Q8_0
+
+# Deploy to Ollama
+ollama create smallville-social -f finetune/output-social/Modelfile
+ollama create smallville-actor -f finetune/output/Modelfile
+```
+
+**Training config**: LORA_R=64, LORA_ALPHA=128, dropout=0.05, LR=2e-4, cosine schedule, packing enabled.
+**Python**: `~/.pyenv/versions/3.11.9/bin/python` (has unsloth, torch 2.5.1+cu121).
+
+## Known Issues & Lessons
+
+- **Reflection loops**: Never count reflections toward their own importance threshold (+ 5-min cooldown)
+- **"Helpers not guests"**: Small models default to instrumental reasoning (tasks) over social reasoning — agents plan to "check wiring" at a party instead of attending for fun. Fine-tuned social expert addresses this.
+- **Conversation meta-leak**: `_clean_dialogue()` regex in `conversation.py` strips LLM meta-commentary from dialogue
+- **30-tick conversation cooldown** prevents agents from re-entering conversations immediately
+- **Re-planning cap**: Max 3 re-plans/day to prevent thrashing, but too aggressive a cap suppresses emergence
+- **Chatterbox/TTS chunks**: 300 chars max or output is garbled noise
+- **Sim venv needs `pyyaml`** — missing it causes all conversation responses to fall back to "I see."
+
 ## Key Data Paths
 
-- `db/memories.db` — SQLite database for all agent memories and skills (created at runtime)
+- `db/memories.db` — SQLite database for all agent memories and skills (FTS5 for full-text search)
+- `saves/latest_state.json` — auto-resume state (skips re-planning on restart)
 - `saves/` — JSON state snapshots (auto-save every 100 ticks)
 - `simulation.log` — detailed activity log
+- `finetune/data/` — training JSONL files
+- `finetune/output*/` — merged model weights and Modelfiles
 
 ## Customization Points
 
@@ -80,6 +141,7 @@ main.py (SmallvilleSimulation)  — orchestrates tick loop, init, save/load, shu
 - **Add locations**: Add entries to `SMALLVILLE_LOCATIONS` dict in `config.py`
 - **Tune memory**: Adjust `MEMORY_RETRIEVAL_WEIGHTS`, `IMPORTANCE_THRESHOLD`, `RECENCY_DECAY_FACTOR` in `config.py`
 - **Tune conversations**: Adjust `CONVERSATION_PROBABILITY`, `MAX_CONVERSATION_TURNS`, `CONVERSATION_RELEVANCE_THRESHOLD` in `config.py`
+- **Tune performance**: `TICK_DURATION_SECONDS` (default 180 = 3 min game time), `CONVERSATION_CHECK_INTERVAL` (every N ticks), `AGENT_BATCH_SIZE` (concurrent processing)
 
 ## Codebase Conventions
 
@@ -87,3 +149,5 @@ main.py (SmallvilleSimulation)  — orchestrates tick loop, init, save/load, shu
 - No class inheritance hierarchy; agents are flat `GenerativeAgent` instances differentiated by persona data
 - Prompt templates live in `prompts.py`, not inline in logic modules
 - The simulation starts on 2023-02-13 08:00 (Valentine's Day scenario where Isabella Rodriguez spreads party info through natural conversation)
+- GPU queue integration in `llm.py` — routes through `../gpu-queue/queue_manager.py` with Pi 5 fallback. Disable with `--no-gpu-queue`
+- Rule-based importance scoring for common observations (keywords in `config.py`) to avoid LLM calls

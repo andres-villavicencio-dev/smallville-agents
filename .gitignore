@@ -18,3 +18,4 @@ simulation.log
 simulation_stdout.log
 broadcaster.log
 .broadcaster_state.json
+finetune/llama.cpp
