@@ -3,7 +3,7 @@ import asyncio
 import sys
 import json
 import logging
-import requests
+import aiohttp
 from typing import Optional, Dict, Any, List
 from config import MODELS, OLLAMA_BASE_URL
 from prompts import (
@@ -83,7 +83,7 @@ class OllamaClient:
     
     async def _generate_direct(self, prompt: str, system_prompt: Optional[str],
                               temperature: float, max_tokens: int, model: str) -> str:
-        """Generate using direct Ollama API. Retries on connection failures."""
+        """Generate using direct Ollama API (async). Retries on connection failures."""
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -104,16 +104,17 @@ class OllamaClient:
         
         for attempt in range(max_retries):
             try:
-                response = requests.post(
-                    f"{self.base_url}/api/chat",
-                    json=payload,
-                    timeout=60
-                )
-                response.raise_for_status()
-                result = response.json()
-                return result["message"]["content"].strip()
+                timeout = aiohttp.ClientTimeout(total=60)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(
+                        f"{self.base_url}/api/chat",
+                        json=payload,
+                    ) as resp:
+                        resp.raise_for_status()
+                        result = await resp.json()
+                        return result["message"]["content"].strip()
                 
-            except (requests.ConnectionError, requests.Timeout) as e:
+            except (aiohttp.ClientConnectionError, asyncio.TimeoutError) as e:
                 delay = min(base_delay * (attempt + 1), 120)
                 logger.warning(
                     f"Ollama unavailable ({model}, attempt {attempt + 1}/{max_retries}), "

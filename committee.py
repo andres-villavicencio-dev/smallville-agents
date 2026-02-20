@@ -131,7 +131,7 @@ PIPELINE_TOKEN_OVERRIDES = {
 }
 
 
-import requests
+import aiohttp
 
 # Import status callback
 try:
@@ -247,10 +247,8 @@ class Committee:
         return "\n".join(parts)
 
     async def _call_model(self, expert: ExpertConfig, prompt: str, max_tokens_override: int = None) -> str:
-        """Call an Ollama model. Sequential — one at a time for VRAM.
+        """Call an Ollama model (async). Sequential — one at a time for VRAM.
         Retries with backoff if Ollama is temporarily unavailable (e.g. during TTS)."""
-        import time
-        
         effective_max_tokens = max_tokens_override if max_tokens_override is not None else expert.max_tokens
         payload = {
             "model": expert.model,
@@ -266,20 +264,21 @@ class Committee:
         }
 
         max_retries = 10
-        base_delay = 15  # seconds — Ollama restart takes ~5-10s, TTS pipeline ~5 min
+        base_delay = 15
         
         for attempt in range(max_retries):
             try:
-                response = requests.post(
-                    f"{self.base_url}/api/chat",
-                    json=payload,
-                    timeout=60,
-                )
-                response.raise_for_status()
-                result = response.json()
-                return result["message"]["content"].strip()
+                timeout = aiohttp.ClientTimeout(total=60)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(
+                        f"{self.base_url}/api/chat",
+                        json=payload,
+                    ) as resp:
+                        resp.raise_for_status()
+                        result = await resp.json()
+                        return result["message"]["content"].strip()
 
-            except (requests.ConnectionError, requests.Timeout) as e:
+            except (aiohttp.ClientConnectionError, asyncio.TimeoutError) as e:
                 delay = min(base_delay * (attempt + 1), 120)
                 logger.warning(
                     f"{expert.name} expert: Ollama unavailable (attempt {attempt + 1}/{max_retries}), "
@@ -426,13 +425,15 @@ async def generate_dialogue(agent_name: str, situation: str, memories: str = "",
             
             _notify_llm_status(agent_name, "dialogue (actor)", actor_model)
             
-            response = requests.post(
-                f"{OLLAMA_BASE_URL}/api/chat",
-                json=payload,
-                timeout=30,
-            )
-            response.raise_for_status()
-            raw = response.json().get("message", {}).get("content", "").strip()
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(
+                    f"{OLLAMA_BASE_URL}/api/chat",
+                    json=payload,
+                ) as resp:
+                    resp.raise_for_status()
+                    resp_json = await resp.json()
+                    raw = resp_json.get("message", {}).get("content", "").strip()
             if raw and len(raw) > 5:
                 return _clean_dialogue(raw, agent_name)
             logger.warning(f"Actor model returned empty/short response for {agent_name}, falling back")
@@ -467,13 +468,15 @@ async def generate_dialogue(agent_name: str, situation: str, memories: str = "",
         
         _notify_llm_status(agent_name, "dialogue (cloud)", cloud_model)
         
-        response = requests.post(
-            f"{OLLAMA_BASE_URL}/api/chat",
-            json=payload,
-            timeout=60,
-        )
-        response.raise_for_status()
-        raw = response.json().get("message", {}).get("content", "").strip()
+        timeout = aiohttp.ClientTimeout(total=60)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                f"{OLLAMA_BASE_URL}/api/chat",
+                json=payload,
+            ) as resp:
+                resp.raise_for_status()
+                resp_json = await resp.json()
+                raw = resp_json.get("message", {}).get("content", "").strip()
         return _clean_dialogue(raw, agent_name)
     except Exception as e:
         logger.warning(f"Cloud dialogue also failed for {agent_name}: {e}, using local fallback")
