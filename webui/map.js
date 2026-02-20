@@ -121,6 +121,46 @@ const BUILDINGS = {
         x: 44, y: 14, width: 12, height: 8,
         entrance: { x: 49, y: 22 },
         wallType: 'blue', label: "Oak Hill College"
+    },
+    "Williams Residence": {
+        x: 44, y: 3, width: 4, height: 4,
+        entrance: { x: 45, y: 7 },
+        wallType: 'brown', label: "Williams"
+    },
+    "Anderson Residence": {
+        x: 44, y: 25, width: 5, height: 4,
+        entrance: { x: 46, y: 29 },
+        wallType: 'brown', label: "Anderson"
+    },
+    "Davis Residence": {
+        x: 51, y: 25, width: 5, height: 4,
+        entrance: { x: 53, y: 29 },
+        wallType: 'brown', label: "Davis"
+    },
+    "Mayor Residence": {
+        x: 40, y: 3, width: 4, height: 4,
+        entrance: { x: 41, y: 7 },
+        wallType: 'gray', label: "Mayor"
+    },
+    "Rodriguez Home": {
+        x: 3, y: 33, width: 5, height: 4,
+        entrance: { x: 5, y: 37 },
+        wallType: 'brown', label: "Rodriguez"
+    },
+    "Peterson Cottage": {
+        x: 12, y: 33, width: 4, height: 4,
+        entrance: { x: 13, y: 37 },
+        wallType: 'brown', label: "Peterson"
+    },
+    "Thompson Residence": {
+        x: 35, y: 33, width: 5, height: 4,
+        entrance: { x: 37, y: 37 },
+        wallType: 'brown', label: "Thompson"
+    },
+    "Wilson Apartment": {
+        x: 42, y: 33, width: 4, height: 4,
+        entrance: { x: 43, y: 37 },
+        wallType: 'brown', label: "Wilson"
     }
 };
 
@@ -141,6 +181,7 @@ class SmallvilleScene extends Phaser.Scene {
         this.agents = {};
         this.agentSprites = {};
         this.agentBubbles = {};
+        this.agentLabels = {};
         this.buildingLabels = {};
         this.highlightedAgent = null;
         this.walkableGrid = [];
@@ -732,6 +773,18 @@ class SmallvilleScene extends Phaser.Scene {
         // Create speech bubble (hidden initially)
         const bubble = this.createSpeechBubble(agentName);
         this.agentBubbles[agentName] = bubble;
+
+        // Create name label below sprite
+        const firstName = agentName.split(' ')[0];
+        const label = this.add.text(startX, startY + 12, firstName, {
+            fontSize: '7px',
+            fontFamily: 'Arial',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2,
+            align: 'center'
+        }).setOrigin(0.5, 0).setDepth(201);
+        this.agentLabels[agentName] = label;
     }
 
     createSpeechBubble(agentName) {
@@ -784,6 +837,11 @@ class SmallvilleScene extends Phaser.Scene {
             const bubble = this.agentBubbles[agentName];
             if (bubble && sprite) {
                 bubble.setPosition(sprite.x, sprite.y - 20);
+            }
+            // Update name label position
+            const label = this.agentLabels[agentName];
+            if (label && sprite) {
+                label.setPosition(sprite.x, sprite.y + 12);
             }
         }
 
@@ -1152,3 +1210,4 @@ window.initMap = initMap;
 window.updateMap = updateMap;
 window.highlightAgent = highlightAgent;
 window.clearHighlight = clearHighlight;
+window.AGENT_NAMES = AGENT_NAMES;

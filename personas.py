@@ -317,7 +317,7 @@ AGENT_PERSONAS = {
         },
         "daily_routine": ["see patients", "make house calls", "teach students", "research"],
         "goals": ["provide excellent healthcare", "train next generation", "serve community"],
-        "home_location": "Near clinic",
+        "home_location": "Williams Residence",
         "work_location": "Medical clinic"
     },
     
@@ -335,10 +335,10 @@ AGENT_PERSONAS = {
         },
         "daily_routine": ["teach classes", "grade papers", "research", "faculty meetings"],
         "goals": ["advance knowledge", "challenge students", "publish research"],
-        "home_location": "Near college",
+        "home_location": "Anderson Residence",
         "work_location": "Oak Hill College"
     },
-    
+
     "Professor Davis": {
         "name": "Professor Davis",
         "age": 41,
@@ -353,7 +353,7 @@ AGENT_PERSONAS = {
         },
         "daily_routine": ["teach art classes", "work on personal art", "mentor students", "gallery visits"],
         "goals": ["inspire creativity", "develop student talent", "create meaningful art"],
-        "home_location": "Near college",
+        "home_location": "Davis Residence",
         "work_location": "Oak Hill College"
     },
     
@@ -389,7 +389,7 @@ AGENT_PERSONAS = {
         },
         "daily_routine": ["city meetings", "public appearances", "administrative work", "campaign"],
         "goals": ["win re-election", "maintain stability", "serve citizens"],
-        "home_location": "Mayor's residence",
+        "home_location": "Mayor Residence",
         "work_location": "Town Hall"
     },
     
@@ -407,7 +407,7 @@ AGENT_PERSONAS = {
         },
         "daily_routine": ["prep food", "cook meals", "menu planning", "help Isabella"],
         "goals": ["perfect culinary skills", "support sister", "open own restaurant"],
-        "home_location": "Near restaurant",
+        "home_location": "Rodriguez Home",
         "work_location": "Local restaurant"
     },
     
@@ -425,7 +425,7 @@ AGENT_PERSONAS = {
         },
         "daily_routine": ["volunteer work", "visit library", "community events", "gardening"],
         "goals": ["help community", "stay connected", "share wisdom"],
-        "home_location": "Small house",
+        "home_location": "Peterson Cottage",
         "work_location": "Various volunteer locations"
     },
     
@@ -443,7 +443,7 @@ AGENT_PERSONAS = {
         },
         "daily_routine": ["patrol town", "community meetings", "paperwork", "emergency response"],
         "goals": ["keep town safe", "build community trust", "prevent crime"],
-        "home_location": "Near police station",
+        "home_location": "Thompson Residence",
         "work_location": "Police station"
     },
     
@@ -479,7 +479,7 @@ AGENT_PERSONAS = {
         },
         "daily_routine": ["maintenance rounds", "repair work", "check buildings", "tool maintenance"],
         "goals": ["keep town maintained", "reliable service", "steady income"],
-        "home_location": "Small apartment",
+        "home_location": "Wilson Apartment",
         "work_location": "Various locations around town"
     }
 }

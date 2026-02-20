@@ -118,6 +118,9 @@ function handleTick(data) {
         window.updateMap(state.agents, state.locations, state.conversations, state.currentTime);
     }
 
+    // Update agent list locations
+    updateAgentListLocations(state.agents);
+
     // If agent selected, update their activity display
     if (state.selectedAgent && state.agents[state.selectedAgent]) {
         updateAgentActivity(state.selectedAgent, state.agents[state.selectedAgent]);
@@ -562,6 +565,55 @@ window.onBuildingHover = (buildingName, agents) => {
 };
 
 // ============================================================================
+// AGENT LIST SIDEBAR
+// ============================================================================
+
+function initAgentList() {
+    const container = document.getElementById('agent-list');
+    if (!container) return;
+
+    // Get agent names from map.js
+    const agentNames = window.AGENT_NAMES || [];
+
+    agentNames.forEach((name, index) => {
+        const item = document.createElement('div');
+        item.className = 'agent-list-item';
+        item.dataset.agent = name;
+
+        // Generate color matching map.js (HSL with index/25, 0.7, 0.55)
+        const hue = (index / 25) * 360;
+        const color = `hsl(${hue}, 70%, 55%)`;
+
+        item.innerHTML = `
+            <div class="agent-dot" style="background-color: ${color}"></div>
+            <div class="agent-list-info">
+                <div class="agent-list-name">${escapeHtml(name)}</div>
+                <div class="agent-list-location" id="agent-loc-${index}">Unknown</div>
+            </div>
+        `;
+
+        item.addEventListener('click', () => {
+            selectAgent(name);
+            // Update selected state in list
+            document.querySelectorAll('.agent-list-item').forEach(el => el.classList.remove('selected'));
+            item.classList.add('selected');
+        });
+
+        container.appendChild(item);
+    });
+}
+
+function updateAgentListLocations(agents) {
+    const agentNames = window.AGENT_NAMES || [];
+    agentNames.forEach((name, index) => {
+        const locEl = document.getElementById(`agent-loc-${index}`);
+        if (locEl && agents[name]) {
+            locEl.textContent = agents[name].location || 'Unknown';
+        }
+    });
+}
+
+// ============================================================================
 // INITIALIZATION
 // ============================================================================
 
@@ -572,6 +624,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.initMap) {
         window.initMap('map-canvas');
     }
+
+    // Initialize agent list sidebar
+    initAgentList();
 
     // Connect to WebSocket
     connect();

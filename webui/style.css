@@ -137,10 +137,103 @@ body {
 /* Main Content */
 .main-content {
     display: grid;
-    grid-template-columns: 60% 40%;
+    grid-template-columns: 200px 1fr 380px;
     gap: 10px;
     padding: 10px;
     overflow: hidden;
+}
+
+/* Agent List Sidebar */
+.agent-list-section {
+    overflow-y: auto;
+}
+
+.agent-list-section::-webkit-scrollbar {
+    width: 6px;
+}
+
+.agent-list-section::-webkit-scrollbar-track {
+    background: #1a1a2e;
+}
+
+.agent-list-section::-webkit-scrollbar-thumb {
+    background: #0f3460;
+    border-radius: 2px;
+}
+
+.agent-list-section::-webkit-scrollbar-thumb:hover {
+    background: #e94560;
+}
+
+#agent-list-panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.agent-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.agent-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.agent-list::-webkit-scrollbar-track {
+    background: #1a1a2e;
+}
+
+.agent-list::-webkit-scrollbar-thumb {
+    background: #0f3460;
+}
+
+.agent-list-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    cursor: pointer;
+    border-bottom: 1px solid #0f3460;
+    transition: background 0.2s;
+}
+
+.agent-list-item:hover {
+    background: #0f3460;
+}
+
+.agent-list-item.selected {
+    background: #0f3460;
+    border-left: 2px solid #e94560;
+}
+
+.agent-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.agent-list-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.agent-list-name {
+    font-size: 11px;
+    font-weight: bold;
+    color: #e0e0e0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.agent-list-location {
+    font-size: 9px;
+    color: #0f3460;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Panel Base Style */
@@ -732,10 +825,20 @@ body {
 }
 
 /* Responsive Design */
+@media (max-width: 1200px) {
+    .main-content {
+        grid-template-columns: 160px 1fr 300px;
+    }
+}
+
 @media (max-width: 1000px) {
     .main-content {
         grid-template-columns: 1fr;
         grid-template-rows: 400px 1fr;
+    }
+
+    .agent-list-section {
+        display: none;
     }
 
     .bottom-panels {
