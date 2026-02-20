@@ -624,18 +624,64 @@ class SmallvilleScene extends Phaser.Scene {
         // Enable zoom
         camera.setZoom(2);
 
-        // Mouse drag to pan
+        // Enable second pointer for multitouch
+        this.input.addPointer(1);
+
+        // Track pinch distance for pinch-to-zoom
+        let pinchDistance = 0;
+        let isPinching = false;
+
+        // Mouse drag to pan (single touch or mouse)
         this.input.on('pointermove', (pointer) => {
+            // Skip if pinching
+            if (isPinching) return;
+
             if (pointer.isDown && pointer.button === 0) {
-                camera.scrollX -= (pointer.x - pointer.prevPosition.x) / camera.zoom;
-                camera.scrollY -= (pointer.y - pointer.prevPosition.y) / camera.zoom;
+                // Only pan with single touch
+                if (!this.input.pointer2.isDown) {
+                    camera.scrollX -= (pointer.x - pointer.prevPosition.x) / camera.zoom;
+                    camera.scrollY -= (pointer.y - pointer.prevPosition.y) / camera.zoom;
+                }
+            }
+        });
+
+        // Pinch-to-zoom for touch devices
+        this.input.on('pointerdown', (pointer) => {
+            if (this.input.pointer1.isDown && this.input.pointer2.isDown) {
+                const dx = this.input.pointer1.x - this.input.pointer2.x;
+                const dy = this.input.pointer1.y - this.input.pointer2.y;
+                pinchDistance = Math.sqrt(dx * dx + dy * dy);
+                isPinching = true;
+            }
+        });
+
+        this.input.on('pointermove', (pointer) => {
+            if (this.input.pointer1.isDown && this.input.pointer2.isDown) {
+                const dx = this.input.pointer1.x - this.input.pointer2.x;
+                const dy = this.input.pointer1.y - this.input.pointer2.y;
+                const newDistance = Math.sqrt(dx * dx + dy * dy);
+
+                if (pinchDistance > 0) {
+                    const zoomDelta = (newDistance - pinchDistance) * 0.005;
+                    const newZoom = Phaser.Math.Clamp(camera.zoom + zoomDelta, 0.5, 4);
+                    camera.setZoom(newZoom);
+                    pinchDistance = newDistance;
+                }
+            }
+        });
+
+        this.input.on('pointerup', (pointer) => {
+            // Reset pinch state when any pointer is released
+            if (!this.input.pointer1.isDown || !this.input.pointer2.isDown) {
+                isPinching = false;
+                pinchDistance = 0;
             }
         });
 
         // Mouse wheel to zoom
         this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
             const zoomChange = deltaY > 0 ? -0.1 : 0.1;
-            const newZoom = Phaser.Math.Clamp(camera.zoom + zoomChange, 1, 4);
+            const newZoom = Phaser.Math.Clamp(camera.zoom + zoomChange, 0.5, 4);
             camera.setZoom(newZoom);
         });
     }

@@ -53,6 +53,8 @@
 
             <!-- Agent Detail Panel -->
             <aside class="agent-section">
+                <div class="mobile-sheet-handle"></div>
+                <button class="mobile-sheet-close" aria-label="Close">&times;</button>
                 <div class="panel" id="agent-panel">
                     <div id="agent-panel-placeholder" class="panel-placeholder">
                         <div class="placeholder-icon">◈</div>
@@ -160,6 +162,13 @@
                 </div>
             </section>
         </footer>
+
+        <!-- Mobile Tab Bar -->
+        <nav class="mobile-tabs">
+            <button class="mobile-tab active" data-tab="map">🗺️ Map</button>
+            <button class="mobile-tab" data-tab="agents">👥 Agents</button>
+            <button class="mobile-tab" data-tab="feed">💬 Feed</button>
+        </nav>
 
         <!-- Credits -->
         <div class="credits">

@@ -19,7 +19,8 @@ const state = {
     memoryType: 'all',
     currentTime: null,
     tickCount: 0,
-    day: 0
+    day: 0,
+    mobileActiveTab: 'map'
 };
 
 let ws = null;
@@ -201,6 +202,23 @@ async function selectAgent(agentName) {
         window.highlightAgent(agentName);
     }
 
+    // Open mobile sheet if on mobile
+    if (isMobile()) {
+        openMobileSheet();
+    }
+
+    // Update selected state in agent list and scroll into view
+    document.querySelectorAll('.agent-list-item').forEach(el => {
+        if (el.dataset.agent === agentName) {
+            el.classList.add('selected');
+            if (isMobile()) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        } else {
+            el.classList.remove('selected');
+        }
+    });
+
     try {
         // Fetch full agent details
         const response = await fetch(`/api/agent/${encodeURIComponent(agentName)}`);
@@ -226,10 +244,121 @@ function clearAgentSelection() {
     placeholder.style.display = 'flex';
     detailPanel.style.display = 'none';
 
+    // Close mobile sheet
+    closeMobileSheet();
+
     // Clear map highlight
     if (window.clearHighlight) {
         window.clearHighlight();
     }
+}
+
+// ============================================================================
+// MOBILE TAB NAVIGATION
+// ============================================================================
+
+function isMobile() {
+    return window.innerWidth < 768;
+}
+
+function switchMobileTab(tabName) {
+    state.mobileActiveTab = tabName;
+
+    // Update tab button states
+    document.querySelectorAll('.mobile-tab').forEach(tab => {
+        if (tab.dataset.tab === tabName) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
+
+    // Get section elements
+    const mapSection = document.querySelector('.map-section');
+    const agentListSection = document.querySelector('.agent-list-section');
+    const bottomPanels = document.querySelector('.bottom-panels');
+
+    // Hide all sections first
+    mapSection.classList.add('hidden');
+    agentListSection.classList.remove('active');
+    bottomPanels.classList.remove('active');
+
+    // Show the appropriate section
+    switch (tabName) {
+        case 'map':
+            mapSection.classList.remove('hidden');
+            // Trigger Phaser resize if needed
+            if (window.phaserGame) {
+                window.phaserGame.scale.refresh();
+            }
+            break;
+        case 'agents':
+            agentListSection.classList.add('active');
+            // If an agent is selected, show the sheet
+            if (state.selectedAgent) {
+                openMobileSheet();
+            }
+            break;
+        case 'feed':
+            bottomPanels.classList.add('active');
+            break;
+    }
+}
+
+function openMobileSheet() {
+    if (!isMobile()) return;
+    const agentSection = document.querySelector('.agent-section');
+    if (agentSection) {
+        agentSection.classList.add('sheet-open');
+    }
+}
+
+function closeMobileSheet() {
+    const agentSection = document.querySelector('.agent-section');
+    if (agentSection) {
+        agentSection.classList.remove('sheet-open');
+    }
+}
+
+function initMobileNavigation() {
+    // Bind mobile tab clicks
+    document.querySelectorAll('.mobile-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            switchMobileTab(tab.dataset.tab);
+        });
+    });
+
+    // Bind mobile sheet close button
+    const closeBtn = document.querySelector('.mobile-sheet-close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            closeMobileSheet();
+            clearAgentSelection();
+        });
+    }
+
+    // Handle resize events - reset layout when crossing breakpoint
+    let wasMobile = isMobile();
+    window.addEventListener('resize', () => {
+        const nowMobile = isMobile();
+        if (wasMobile !== nowMobile) {
+            wasMobile = nowMobile;
+            if (nowMobile) {
+                // Switched to mobile - ensure correct tab is shown
+                switchMobileTab(state.mobileActiveTab);
+            } else {
+                // Switched to desktop - reset classes
+                const mapSection = document.querySelector('.map-section');
+                const agentListSection = document.querySelector('.agent-list-section');
+                const bottomPanels = document.querySelector('.bottom-panels');
+
+                mapSection.classList.remove('hidden');
+                agentListSection.classList.remove('active');
+                bottomPanels.classList.remove('active');
+                closeMobileSheet();
+            }
+        }
+    });
 }
 
 function populateAgentDetail(data) {
@@ -627,6 +756,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize agent list sidebar
     initAgentList();
+
+    // Initialize mobile navigation
+    initMobileNavigation();
 
     // Connect to WebSocket
     connect();
