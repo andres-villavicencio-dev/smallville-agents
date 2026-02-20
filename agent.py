@@ -296,34 +296,39 @@ class GenerativeAgent:
         return plan_items
     
     def _extract_time_from_text(self, text: str) -> Optional[Tuple[int, int]]:
-        """Extract time from text (e.g., '8:30 am', '2 pm')."""
+        """Extract time from text (e.g., '8:30 am', '2 pm', '10:00')."""
         import re
         
-        # Pattern for time like "8:30 am", "2 pm", "10:00"
-        time_patterns = [
-            r'(\d{1,2}):(\d{2})\s*([ap]m)?',
-            r'(\d{1,2})\s*([ap]m)',
-            r'at\s*(\d{1,2}):(\d{2})',
-            r'at\s*(\d{1,2})\s*([ap]m)'
-        ]
-        
         text_lower = text.lower()
-        for pattern in time_patterns:
-            match = re.search(pattern, text_lower)
-            if match:
-                try:
-                    hour = int(match.group(1))
-                    minute = int(match.group(2)) if len(match.groups()) > 1 and match.group(2) else 0
-                    am_pm = match.group(-1) if len(match.groups()) > 2 else None
-                    
-                    if am_pm == 'pm' and hour != 12:
-                        hour += 12
-                    elif am_pm == 'am' and hour == 12:
-                        hour = 0
-                    
-                    return (hour, minute)
-                except (ValueError, IndexError):
-                    continue
+        
+        # Try "HH:MM am/pm" first (most specific)
+        match = re.search(r'(\d{1,2}):(\d{2})\s*([ap]m)', text_lower)
+        if match:
+            hour, minute = int(match.group(1)), int(match.group(2))
+            am_pm = match.group(3)
+            if am_pm == 'pm' and hour != 12:
+                hour += 12
+            elif am_pm == 'am' and hour == 12:
+                hour = 0
+            return (hour, minute)
+        
+        # Try "H am/pm" (no minutes)
+        match = re.search(r'(\d{1,2})\s*([ap]m)', text_lower)
+        if match:
+            hour = int(match.group(1))
+            am_pm = match.group(2)
+            if am_pm == 'pm' and hour != 12:
+                hour += 12
+            elif am_pm == 'am' and hour == 12:
+                hour = 0
+            return (hour, 0)
+        
+        # Try "HH:MM" (24-hour, no am/pm)
+        match = re.search(r'(\d{1,2}):(\d{2})', text_lower)
+        if match:
+            hour, minute = int(match.group(1)), int(match.group(2))
+            if 0 <= hour <= 23 and 0 <= minute <= 59:
+                return (hour, minute)
         
         return None
     

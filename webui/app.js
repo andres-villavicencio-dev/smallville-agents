@@ -388,7 +388,9 @@ function populateAgentDetail(data) {
                 const hh = String(time.getHours()).padStart(2, '0');
                 const mm = String(time.getMinutes()).padStart(2, '0');
                 const done = item.completed ? ' ✓' : '';
-                return `<li><span class="schedule-time">${hh}:${mm}</span> ${escapeHtml(item.description)}${done}</li>`;
+                // Strip leading time from description to avoid duplicate display
+                const desc = item.description.replace(/^\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?\s*[-–—]\s*/i, '');
+                return `<li><span class="schedule-time">${hh}:${mm}</span> ${escapeHtml(desc)}${done}</li>`;
             })
             .join('');
     } else if (persona.daily_routine && persona.daily_routine.length > 0) {
