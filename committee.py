@@ -8,6 +8,7 @@ Architecture:
     Each decision flows through relevant experts sequentially, building context.
     A judge model synthesizes expert outputs into a final action/response.
 """
+import asyncio
 import logging
 import os
 from typing import List, Dict, Optional, Any
@@ -246,35 +247,51 @@ class Committee:
         return "\n".join(parts)
 
     async def _call_model(self, expert: ExpertConfig, prompt: str, max_tokens_override: int = None) -> str:
-        """Call an Ollama model. Sequential — one at a time for VRAM."""
-        try:
-            effective_max_tokens = max_tokens_override if max_tokens_override is not None else expert.max_tokens
-            payload = {
-                "model": expert.model,
-                "messages": [
-                    {"role": "system", "content": expert.role},
-                    {"role": "user", "content": prompt},
-                ],
-                "stream": False,
-                "options": {
-                    "temperature": expert.temperature,
-                    "num_predict": effective_max_tokens,
-                },
-            }
+        """Call an Ollama model. Sequential — one at a time for VRAM.
+        Retries with backoff if Ollama is temporarily unavailable (e.g. during TTS)."""
+        import time
+        
+        effective_max_tokens = max_tokens_override if max_tokens_override is not None else expert.max_tokens
+        payload = {
+            "model": expert.model,
+            "messages": [
+                {"role": "system", "content": expert.role},
+                {"role": "user", "content": prompt},
+            ],
+            "stream": False,
+            "options": {
+                "temperature": expert.temperature,
+                "num_predict": effective_max_tokens,
+            },
+        }
 
-            response = requests.post(
-                f"{self.base_url}/api/chat",
-                json=payload,
-                timeout=30,
-            )
-            response.raise_for_status()
+        max_retries = 10
+        base_delay = 15  # seconds — Ollama restart takes ~5-10s, TTS pipeline ~5 min
+        
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    f"{self.base_url}/api/chat",
+                    json=payload,
+                    timeout=60,
+                )
+                response.raise_for_status()
+                result = response.json()
+                return result["message"]["content"].strip()
 
-            result = response.json()
-            return result["message"]["content"].strip()
-
-        except Exception as e:
-            logger.error(f"{expert.name} expert ({expert.model}) failed: {e}")
-            return ""
+            except (requests.ConnectionError, requests.Timeout) as e:
+                delay = min(base_delay * (attempt + 1), 120)
+                logger.warning(
+                    f"{expert.name} expert: Ollama unavailable (attempt {attempt + 1}/{max_retries}), "
+                    f"retrying in {delay}s... ({type(e).__name__})"
+                )
+                await asyncio.sleep(delay)
+            except Exception as e:
+                logger.error(f"{expert.name} expert ({expert.model}) failed: {e}")
+                return ""
+        
+        logger.error(f"{expert.name} expert: Ollama unavailable after {max_retries} retries, giving up")
+        return ""
 
     def get_stats(self) -> Dict[str, Any]:
         """Get committee usage statistics."""

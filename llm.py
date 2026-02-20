@@ -1,4 +1,5 @@
 """LLM interface for Ollama with GPU queue support and per-task model routing."""
+import asyncio
 import sys
 import json
 import logging
@@ -82,36 +83,49 @@ class OllamaClient:
     
     async def _generate_direct(self, prompt: str, system_prompt: Optional[str],
                               temperature: float, max_tokens: int, model: str) -> str:
-        """Generate using direct Ollama API."""
-        try:
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
-            
-            payload = {
-                "model": model,
-                "messages": messages,
-                "stream": False,
-                "options": {
-                    "temperature": temperature,
-                    "num_predict": max_tokens
-                }
+        """Generate using direct Ollama API. Retries on connection failures."""
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens
             }
-            
-            response = requests.post(
-                f"{self.base_url}/api/chat",
-                json=payload,
-                timeout=60
-            )
-            response.raise_for_status()
-            
-            result = response.json()
-            return result["message"]["content"].strip()
-            
-        except Exception as e:
-            logger.error(f"Direct Ollama generation failed ({model}): {e}")
-            return ""
+        }
+        
+        max_retries = 10
+        base_delay = 15
+        
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    f"{self.base_url}/api/chat",
+                    json=payload,
+                    timeout=60
+                )
+                response.raise_for_status()
+                result = response.json()
+                return result["message"]["content"].strip()
+                
+            except (requests.ConnectionError, requests.Timeout) as e:
+                delay = min(base_delay * (attempt + 1), 120)
+                logger.warning(
+                    f"Ollama unavailable ({model}, attempt {attempt + 1}/{max_retries}), "
+                    f"retrying in {delay}s..."
+                )
+                await asyncio.sleep(delay)
+            except Exception as e:
+                logger.error(f"Direct Ollama generation failed ({model}): {e}")
+                return ""
+        
+        logger.error(f"Ollama unavailable after {max_retries} retries ({model}), giving up")
+        return ""
     
     async def score_importance(self, observation: str, agent_name: str = "") -> int:
         """Score the importance of an observation (1-10). Uses fast/small model."""
