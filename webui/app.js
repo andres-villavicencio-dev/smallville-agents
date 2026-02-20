@@ -115,7 +115,7 @@ function handleTick(data) {
 
     // Update map (from map.js)
     if (window.updateMap) {
-        window.updateMap(state.agents, state.locations);
+        window.updateMap(state.agents, state.locations, state.conversations, state.currentTime);
     }
 
     // If agent selected, update their activity display

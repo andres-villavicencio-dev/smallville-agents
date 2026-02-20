@@ -1,0 +1,8 @@
+2026-02-15 22:04:34,800 - INFO - Plan: 200 conversations across 8 scenario types
+2026-02-15 22:04:34,800 - INFO - Model: gemma3:4b
+2026-02-15 22:04:34,800 - INFO - Output: /home/andus/.openclaw/workspace/generative-agents/finetune/data/training_data.jsonl
+2026-02-15 22:05:20,905 - INFO - Progress: 10/200 conversations, 51 training examples
+2026-02-15 22:06:12,448 - INFO - Progress: 20/200 conversations, 107 training examples
+2026-02-15 22:07:04,351 - INFO - Progress: 30/200 conversations, 164 training examples
+2026-02-15 22:07:55,361 - INFO - Progress: 40/200 conversations, 222 training examples
+2026-02-15 22:09:50,565 - INFO - Progress: 50/200 conversations, 285 training examples

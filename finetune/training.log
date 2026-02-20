@@ -1,0 +1,136 @@
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+Unsloth: Failed to patch Gemma3ForConditionalGeneration.
+WARNING[XFORMERS]: xFormers can't load C++/CUDA extensions. xFormers was built for:
+    PyTorch 2.6.0+cu124 with CUDA 1204 (you have 2.5.1+cu121)
+    Python  3.11.11 (you have 3.11.9)
+  Please reinstall xformers (see https://github.com/facebookresearch/xformers#installing-xformers)
+  Memory-efficient attention, SwiGLU, sparse and more won't be available.
+  Set XFORMERS_MORE_DETAILS=1 for more details
+🦥 Unsloth Zoo will now patch everything to make training faster!
+============================================================
+Smallville Character Actor — Fine-Tuning
+============================================================
+Loaded 177 training examples
+Dataset: 177 examples
+Sample:
+<start_of_turn>user
+System context: [AGENT: Isabella Rodriguez]
+[AGE: 34] [OCCUPATION: Cafe owner (Hobbs Cafe)]
+[SPEECH: Warm, flowing, inviting. Chains thoughts together with dashes and "and" — she thinks out loud. Uses food and nature metaphors constantly. Always finds a way to connect what someon...
+
+Loading model...
+Unsloth: If you want to finetune Gemma 2, install flash-attn to make it faster!
+To install flash-attn, do the below:
+
+pip install --no-deps --upgrade "flash-attn>=2.6.3"
+==((====))==  Unsloth 2025.3.19: Fast Gemma2 patching. Transformers: 4.51.3.
+   \\   /|    NVIDIA GeForce RTX 3070 Laptop GPU. Num GPUs = 1. Max memory: 7.648 GB. Platform: Linux.
+O^O/ \_/ \    Torch: 2.5.1+cu121. CUDA: 8.6. CUDA Toolkit: 12.1. Triton: 3.1.0
+\        /    Bfloat16 = TRUE. FA [Xformers = None. FA2 = False]
+ "-____-"     Free license: http://github.com/unslothai/unsloth
+Unsloth: Fast downloading is enabled - ignore downloading bars which are red colored!
+Applying QLoRA adapters...
+Unsloth: Dropout = 0 is supported for fast patching. You are using dropout = 0.05.
+Unsloth will patch all other layers, except LoRA matrices, causing a performance hit.
+Unsloth 2025.3.19 patched 26 layers with 0 QKV layers, 0 O layers and 0 MLP layers.
+Starting training...
+Unsloth: Tokenizing ["text"] (num_proc=16):   0%|          | 0/177 [00:00<?, ? examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):   7%|▋         | 12/177 [00:02<00:33,  4.96 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  19%|█▉        | 34/177 [00:02<00:10, 14.08 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  25%|██▌       | 45/177 [00:03<00:08, 16.47 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  32%|███▏      | 56/177 [00:03<00:06, 17.89 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  38%|███▊      | 67/177 [00:04<00:05, 19.49 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  44%|████▍     | 78/177 [00:04<00:04, 20.75 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  50%|█████     | 89/177 [00:05<00:04, 21.85 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  56%|█████▋    | 100/177 [00:05<00:03, 22.81 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  63%|██████▎   | 111/177 [00:06<00:02, 23.11 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  69%|██████▉   | 122/177 [00:06<00:02, 23.25 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  75%|███████▌  | 133/177 [00:07<00:01, 23.39 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  81%|████████▏ | 144/177 [00:07<00:01, 23.26 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  88%|████████▊ | 155/177 [00:07<00:00, 25.14 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16):  94%|█████████▍| 166/177 [00:08<00:00, 25.67 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16): 100%|██████████| 177/177 [00:08<00:00, 26.59 examples/s]Unsloth: Tokenizing ["text"] (num_proc=16): 100%|██████████| 177/177 [00:08<00:00, 20.28 examples/s]
+Unsloth: Hugging Face's packing is currently buggy - we're disabling it for now!
+==((====))==  Unsloth - 2x faster free finetuning | Num GPUs used = 1
+   \\   /|    Num examples = 177 | Num Epochs = 3 | Total steps = 33
+O^O/ \_/ \    Batch size per device = 2 | Gradient accumulation steps = 8
+\        /    Data Parallel GPUs = 1 | Total batch size (2 x 8 x 1) = 16
+ "-____-"     Trainable parameters = 83,066,880/2,000,000,000 (4.15% trained)
+  0%|          | 0/33 [00:00<?, ?it/s]Unsloth: Will smartly offload gradients to save VRAM!
+  3%|▎         | 1/33 [00:34<18:37, 34.91s/it]  6%|▌         | 2/33 [00:40<09:16, 17.95s/it]  9%|▉         | 3/33 [00:47<06:15, 12.50s/it] 12%|█▏        | 4/33 [00:59<06:03, 12.54s/it] 15%|█▌        | 5/33 [01:05<04:44, 10.15s/it]                                              {'loss': 2.6275, 'grad_norm': 1.662692904472351, 'learning_rate': 0.00019795299412524945, 'epoch': 0.45}
+ 15%|█▌        | 5/33 [01:05<04:44, 10.15s/it] 18%|█▊        | 6/33 [01:11<03:53,  8.64s/it] 21%|██        | 7/33 [01:16<03:20,  7.70s/it] 24%|██▍       | 8/33 [01:23<03:00,  7.22s/it] 27%|██▋       | 9/33 [01:29<02:43,  6.83s/it] 30%|███       | 10/33 [01:34<02:29,  6.50s/it]                                               {'loss': 1.5675, 'grad_norm': 1.2462003231048584, 'learning_rate': 0.0001758758122692791, 'epoch': 0.9}
+ 30%|███       | 10/33 [01:34<02:29,  6.50s/it] 33%|███▎      | 11/33 [01:40<02:17,  6.26s/it] 36%|███▋      | 12/33 [01:50<02:32,  7.26s/it] 39%|███▉      | 13/33 [01:57<02:24,  7.22s/it] 42%|████▏     | 14/33 [02:03<02:10,  6.89s/it] 45%|████▌     | 15/33 [02:08<01:56,  6.46s/it]                                               {'loss': 0.9153, 'grad_norm': 1.5635329484939575, 'learning_rate': 0.00013473052528448201, 'epoch': 1.27}
+ 45%|████▌     | 15/33 [02:08<01:56,  6.46s/it] 48%|████▊     | 16/33 [02:14<01:47,  6.35s/it] 52%|█████▏    | 17/33 [02:21<01:42,  6.39s/it] 55%|█████▍    | 18/33 [02:27<01:35,  6.39s/it] 58%|█████▊    | 19/33 [02:34<01:29,  6.36s/it] 61%|██████    | 20/33 [02:39<01:20,  6.16s/it]                                               {'loss': 0.6918, 'grad_norm': 1.1329439878463745, 'learning_rate': 8.485722224954237e-05, 'epoch': 1.72}
+ 61%|██████    | 20/33 [02:39<01:20,  6.16s/it] 64%|██████▎   | 21/33 [02:45<01:13,  6.09s/it] 67%|██████▋   | 22/33 [02:51<01:05,  5.94s/it] 70%|██████▉   | 23/33 [02:57<00:59,  5.94s/it] 73%|███████▎  | 24/33 [02:57<00:38,  4.31s/it] 76%|███████▌  | 25/33 [03:05<00:42,  5.28s/it]                                               {'loss': 0.5285, 'grad_norm': 1.0093830823898315, 'learning_rate': 3.878940174523371e-05, 'epoch': 2.09}
+ 76%|███████▌  | 25/33 [03:05<00:42,  5.28s/it] 79%|███████▉  | 26/33 [03:10<00:37,  5.31s/it] 82%|████████▏ | 27/33 [03:17<00:33,  5.64s/it] 85%|████████▍ | 28/33 [03:23<00:28,  5.79s/it] 88%|████████▊ | 29/33 [03:29<00:23,  5.86s/it] 91%|█████████ | 30/33 [03:35<00:17,  5.97s/it]                                               {'loss': 0.3755, 'grad_norm': 0.8497101664543152, 'learning_rate': 8.10421883797694e-06, 'epoch': 2.54}
+ 91%|█████████ | 30/33 [03:35<00:17,  5.97s/it] 94%|█████████▍| 31/33 [03:41<00:12,  6.12s/it] 97%|█████████▋| 32/33 [03:47<00:06,  6.04s/it]100%|██████████| 33/33 [03:53<00:00,  5.94s/it]                                               {'train_runtime': 235.1609, 'train_samples_per_second': 2.258, 'train_steps_per_second': 0.14, 'train_loss': 1.0493260730396619, 'epoch': 2.81}
+100%|██████████| 33/33 [03:55<00:00,  5.94s/it]100%|██████████| 33/33 [03:55<00:00,  7.13s/it]
+
+Training complete!
+  Loss: 1.0493
+  Runtime: 235s
+  Samples/sec: 2.26
+
+Saving LoRA adapter to /home/andus/.openclaw/workspace/generative-agents/finetune/output/smallville-actor-lora...
+
+Exporting to GGUF (Q5_K_M)...
+Unsloth: ##### The current model auto adds a BOS token.
+Unsloth: ##### Your chat template has a BOS token. We shall remove it temporarily.
+make: Entering directory '/home/andus/.openclaw/workspace/generative-agents/llama.cpp'
+Makefile:6: *** Build system changed:
+ The Makefile build has been replaced by CMake.
+
+ For build instructions see:
+ https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md
+
+.  Stop.
+make: Leaving directory '/home/andus/.openclaw/workspace/generative-agents/llama.cpp'
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+CMAKE_BUILD_TYPE=Release
+-- Found Git: /usr/bin/git (found version "2.43.0") 
+CMake Warning at CMakeLists.txt:122 (message):
+  LLAMA_CURL option is deprecated and will be ignored
+
+
+-- The ASM compiler identification is GNU
+-- Found assembler: /usr/bin/cc
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Warning: ccache not found - consider installing it for faster compilation or disable this warning with GGML_CCACHE=OFF
+-- CMAKE_SYSTEM_PROCESSOR: x86_64
+-- GGML_SYSTEM_ARCH: x86
+-- Including CPU backend
+-- Found OpenMP_C: -fopenmp (found version "4.5") 
+-- Found OpenMP_CXX: -fopenmp (found version "4.5") 
+-- Found OpenMP: TRUE (found version "4.5")  
+-- x86 detected
+-- Adding CPU backend variant ggml-cpu: -march=native 
+-- ggml version: 0.9.5
+-- ggml commit:  184c694f4
+-- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "3.0.13")  
+-- Performing Test OPENSSL_VERSION_SUPPORTED
+-- Performing Test OPENSSL_VERSION_SUPPORTED - Success
+-- OpenSSL found: 3.0.13
+-- Generating embedded license file for target: common
+-- Configuring done (1.2s)
+-- Generating done (0.2s)
+-- Build files have been written to: /home/andus/.openclaw/workspace/generative-agents/llama.cpp/build
+Unsloth: Merging 4bit and LoRA weights to 16bit...
+Unsloth: Will use up to 14.95 out of 31.11 RAM for saving.
+Unsloth: Saving model... This might take 5 minutes ...
+  0%|          | 0/26 [00:00<?, ?it/s] 15%|█▌        | 4/26 [00:00<00:00, 38.56it/s] 42%|████▏     | 11/26 [00:00<00:00, 56.68it/s] 69%|██████▉   | 18/26 [00:00<00:00, 62.66it/s] 96%|█████████▌| 25/26 [00:00<00:00, 65.47it/s]100%|██████████| 26/26 [00:00<00:00, 62.09it/s]
+Unsloth: Saving tokenizer... Done.
+Traceback (most recent call last):
+  File "/home/andus/.openclaw/workspace/generative-agents/finetune/train.py", line 177, in <module>
+    main()
+  File "/home/andus/.openclaw/workspace/generative-agents/finetune/train.py", line 162, in main
+    model.save_pretrained_gguf(
+  File "/home/andus/.pyenv/versions/3.11.9/lib/python3.11/site-packages/unsloth/save.py", line 1806, in unsloth_save_pretrained_gguf
+    new_save_directory, old_username = unsloth_save_model(**arguments)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/andus/.pyenv/versions/3.11.9/lib/python3.11/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/andus/.pyenv/versions/3.11.9/lib/python3.11/site-packages/unsloth/save.py", line 721, in unsloth_save_model
+    internal_model.save_pretrained(**save_pretrained_settings)
+  File "/home/andus/.pyenv/versions/3.11.9/lib/python3.11/site-packages/transformers/modeling_utils.py", line 3465, in save_pretrained
+    state_dict[name] = state_dict[name].clone()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1.12 GiB. GPU 0 has a total capacity of 7.65 GiB of which 667.00 MiB is free. Including non-PyTorch memory, this process has 6.69 GiB memory in use. Of the allocated memory 6.38 GiB is allocated by PyTorch, and 110.52 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

@@ -8,7 +8,7 @@ OLLAMA_BASE_URL = "http://localhost:11434"
 # Task-specific models (override with env vars)
 MODELS = {
     "planning":      os.getenv("MODEL_PLANNING",      "qwen2.5:3b"),      # Structured output, daily plans
-    "conversation":  os.getenv("MODEL_CONVERSATION",   "llama3.2:3b"),     # Chat-tuned, natural dialogue
+    "conversation":  os.getenv("MODEL_CONVERSATION",   "smallville-actor"),  # Fine-tuned 2B character actor
     "reflection":    os.getenv("MODEL_REFLECTION",     "gemma3:4b"),       # Synthesis & abstract reasoning
     "importance":    os.getenv("MODEL_IMPORTANCE",     "gemma3:1b"),       # Fast, called hundreds of times
     "default":       os.getenv("OLLAMA_MODEL",         "qwen2.5:3b"),      # Fallback for anything else
@@ -43,7 +43,7 @@ ACTION_DURATION_RANGE = (5, 15)  # Minutes for atomic actions
 
 # Simulation Configuration
 DEFAULT_SIMULATION_SPEED = 10    # Game seconds per real second
-TICK_DURATION_SECONDS = 120      # Each simulation tick = 2 min game time (720 ticks/day)
+TICK_DURATION_SECONDS = 180      # Each simulation tick = 3 min game time (480 ticks/day)
 DEFAULT_SIM_DAYS = 2            # Default simulation length
 DEFAULT_NUM_AGENTS = 25          # Number of agents to simulate (5-25)
 

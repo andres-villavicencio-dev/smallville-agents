@@ -14,11 +14,11 @@ AGENT_PERSONAS = {
             "Tom Moreno": "friend",
             "Isabella Rodriguez": "acquaintance"
         },
-        "daily_routine": ["open pharmacy at 8am", "help customers with prescriptions", "lunch at Hobbs Cafe", "manage inventory", "close at 6pm"],
+        "daily_routine": ["open pharmacy at 8am", "help customers with prescriptions", "lunch break", "manage inventory", "close at 6pm"],
         "goals": ["run successful pharmacy", "support family", "help community health"],
         "home_location": "Lin Family Home",
         "work_location": "Pharmacy",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "Pharmacy",
         "errand_locations": ["Hobbs Cafe", "Harvey Oak Supply Store"]
     },
     
@@ -34,11 +34,11 @@ AGENT_PERSONAS = {
             "Professor Anderson": "colleague",
             "Sam Moore": "acquaintance"
         },
-        "daily_routine": ["prepare lectures", "teach classes", "lunch at Hobbs Cafe", "grade papers", "research"],
+        "daily_routine": ["prepare lectures", "teach classes", "lunch break", "grade papers", "research"],
         "goals": ["inspire students", "advance research", "support family"],
         "home_location": "Lin Family Home",
         "work_location": "Oak Hill College",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "Oak Hill College",
         "errand_locations": ["Hobbs Cafe", "Library"]
     },
     
@@ -54,11 +54,11 @@ AGENT_PERSONAS = {
             "Carlos Gomez": "best friend",
             "Maria Santos": "girlfriend"
         },
-        "daily_routine": ["attend music classes", "practice piano", "lunch at Hobbs Cafe", "compose music", "hang out with friends at Johnson Park"],
+        "daily_routine": ["attend music classes", "practice piano", "lunch break", "compose music", "hang out with friends at Johnson Park"],
         "goals": ["master music composition", "perform publicly", "make parents proud"],
         "home_location": "Lin Family Home",
         "work_location": "Oak Hill College",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "Johnson Park",
         "errand_locations": ["Hobbs Cafe", "Johnson Park", "The Rose and Crown Pub"]
     },
     
@@ -95,11 +95,11 @@ AGENT_PERSONAS = {
             "John Lin": "friend",
             "Sam Moore": "business acquaintance"
         },
-        "daily_routine": ["open store at 7am", "help customers with projects", "lunch at Hobbs Cafe", "manage inventory", "close at 6pm"],
+        "daily_routine": ["open store at 7am", "help customers with projects", "lunch break", "manage inventory", "close at 6pm"],
         "goals": ["maintain successful business", "help community with repairs", "support family"],
         "home_location": "Moreno Family Home",
         "work_location": "Harvey Oak Supply Store",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "Harvey Oak Supply Store",
         "errand_locations": ["Hobbs Cafe", "Pharmacy", "Johnson Park"]
     },
     
@@ -135,11 +135,11 @@ AGENT_PERSONAS = {
             "Mei Lin": "friend",
             "Sarah Chen": "friend"
         },
-        "daily_routine": ["teach classes", "prepare lessons", "lunch at Hobbs Cafe", "grade work", "walk in Johnson Park"],
+        "daily_routine": ["teach classes", "prepare lessons", "lunch break", "grade work", "walk in Johnson Park"],
         "goals": ["inspire young minds", "support students", "contribute to education"],
         "home_location": "Moreno Family Home",
         "work_location": "Oak Hill College",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "Johnson Park",
         "errand_locations": ["Hobbs Cafe", "Johnson Park", "Library"]
     },
     
@@ -155,11 +155,11 @@ AGENT_PERSONAS = {
             "Professor Davis": "mentor",
             "Lisa Park": "crush"
         },
-        "daily_routine": ["attend art classes", "work on paintings", "lunch at Hobbs Cafe", "hang out with friends at Johnson Park", "explore town"],
+        "daily_routine": ["attend art classes", "work on paintings", "lunch break", "hang out with friends at Johnson Park", "explore town"],
         "goals": ["develop artistic style", "have first art show", "enjoy college life"],
         "home_location": "The Willows",
         "work_location": "Oak Hill College",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "The Willows",
         "errand_locations": ["Hobbs Cafe", "Johnson Park", "Harvey Oak Supply Store"]
     },
     
@@ -175,11 +175,11 @@ AGENT_PERSONAS = {
             "Dr. Williams": "mentor",
             "Ana Santos": "sister"
         },
-        "daily_routine": ["attend science classes", "study at Library", "lunch at Hobbs Cafe", "volunteer at clinic", "spend time with Eddy"],
+        "daily_routine": ["attend science classes", "study at Library", "lunch break", "volunteer at clinic", "spend time with Eddy"],
         "goals": ["get into medical school", "help people", "maintain good grades"],
         "home_location": "The Willows",
         "work_location": "Oak Hill College",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "Library",
         "errand_locations": ["Hobbs Cafe", "Library", "Pharmacy"]
     },
     
@@ -195,11 +195,11 @@ AGENT_PERSONAS = {
             "Professor Anderson": "acquaintance",
             "Mike Johnson": "dating"
         },
-        "daily_routine": ["open library", "help patrons", "lunch at Hobbs Cafe", "organize books", "read"],
+        "daily_routine": ["open library", "help patrons", "lunch break", "organize books", "read"],
         "goals": ["promote literacy", "help community access information", "expand library programs"],
         "home_location": "The Willows",
         "work_location": "Library",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "Library",
         "errand_locations": ["Hobbs Cafe", "Johnson Park"]
     },
     
@@ -215,11 +215,11 @@ AGENT_PERSONAS = {
             "Mayor Johnson": "cousin",
             "Regular Customers": "friends"
         },
-        "daily_routine": ["open pub", "serve drinks", "quick lunch at Hobbs Cafe", "chat with customers", "manage business"],
+        "daily_routine": ["open pub", "serve drinks", "lunch break", "chat with customers", "manage business"],
         "goals": ["maintain friendly atmosphere", "support local community", "grow relationship with Sarah"],
         "home_location": "The Rose and Crown Pub",
         "work_location": "The Rose and Crown Pub",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "The Rose and Crown Pub",
         "errand_locations": ["Hobbs Cafe", "Harvey Oak Supply Store"]
     },
     
@@ -235,11 +235,11 @@ AGENT_PERSONAS = {
             "Campaign volunteers": "colleagues",
             "Clients": "professional"
         },
-        "daily_routine": ["show properties", "meet clients", "lunch at Hobbs Cafe", "support Sam's campaign", "network"],
+        "daily_routine": ["show properties", "meet clients", "lunch break", "support Sam's campaign", "network"],
         "goals": ["grow real estate business", "support Sam's campaign", "raise daughter well"],
         "home_location": "Moore Family Home",
         "work_location": "Town Hall",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "Town Hall",
         "errand_locations": ["Hobbs Cafe", "Library", "Johnson Park"]
     },
     
@@ -255,11 +255,11 @@ AGENT_PERSONAS = {
             "High school friends": "friends",
             "Teachers": "mentors"
         },
-        "daily_routine": ["attend school", "lunch at Hobbs Cafe", "do homework at Library", "hang out with friends at Johnson Park", "family time"],
+        "daily_routine": ["attend school", "lunch break", "do homework at Library", "hang out with friends at Johnson Park", "family time"],
         "goals": ["get good grades", "decide on college", "understand politics", "help father's campaign"],
         "home_location": "Moore Family Home",
         "work_location": "Oak Hill College",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "Oak Hill College",
         "errand_locations": ["Hobbs Cafe", "Johnson Park", "Library"]
     },
     
@@ -275,11 +275,11 @@ AGENT_PERSONAS = {
             "School friends": "friends",
             "Emily Moore": "friend"
         },
-        "daily_routine": ["attend school", "lunch at Hobbs Cafe", "play with friends at Johnson Park", "help at store", "homework"],
+        "daily_routine": ["attend school", "lunch break", "play with friends at Johnson Park", "help at store", "homework"],
         "goals": ["do well in school", "learn from dad", "have fun with friends"],
         "home_location": "Moreno Family Home",
         "work_location": "Harvey Oak Supply Store",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "Moreno Family Home",
         "errand_locations": ["Hobbs Cafe", "Johnson Park"]
     },
     
@@ -295,11 +295,11 @@ AGENT_PERSONAS = {
             "Dr. Williams": "mentor",
             "Hospital staff": "colleagues"
         },
-        "daily_routine": ["attend nursing classes", "clinical rotations", "lunch at Hobbs Cafe", "study at Library", "check on Maria"],
+        "daily_routine": ["attend nursing classes", "clinical rotations", "lunch break", "study at Library", "check on Maria"],
         "goals": ["become registered nurse", "support sister", "help patients"],
         "home_location": "The Willows",
         "work_location": "Oak Hill College",
-        "lunch_location": "Hobbs Cafe",
+        "lunch_location": "Oak Hill College",
         "errand_locations": ["Hobbs Cafe", "Library", "Pharmacy"]
     },
     

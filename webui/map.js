@@ -1,24 +1,15 @@
-// map.js - HTML5 Canvas pixel-art map renderer for Smallville simulation
+// map.js - Phaser 3 pixel-art map renderer for Smallville simulation
+// Replaces the raw Canvas implementation with proper RPG-style visualization
 
-let canvas, ctx;
-let canvasWidth, canvasHeight;
-let scale = 1;
+// ============================================================================
+// CONSTANTS & CONFIGURATION
+// ============================================================================
 
-// Building definitions
-let buildings = [];
+const TILE_SIZE = 16;
+const MAP_WIDTH = 60;  // tiles
+const MAP_HEIGHT = 40; // tiles
 
-// Agent rendering
-const agentColors = {};
-let agentPositions = {};
-let highlightedAgent = null;
-
-// Animation
-let animationFrame = null;
-
-// Tooltip element
-let tooltip = null;
-
-// Agent names in fixed order for color assignment
+// Agent names for color assignment
 const AGENT_NAMES = [
     "John Lin", "Mei Lin", "Eddy Lin", "Isabella Rodriguez", "Tom Moreno",
     "Sam Moore", "Carmen Moreno", "Carlos Gomez", "Maria Santos", "Sarah Chen",
@@ -28,690 +19,1131 @@ const AGENT_NAMES = [
     "Rachel Kim", "Frank Wilson"
 ];
 
-// Location name mapping (simulation uses these exact strings)
-const LOCATION_MAPPING = {
-    "Lin Family Home": "Lin Family Home",
-    "Moreno Family Home": "Moreno Family Home",
-    "Moore Family Home": "Moore Family Home",
-    "The Willows": "The Willows",
-    "Oak Hill College": "Oak Hill College",
-    "Harvey Oak Supply Store": "Harvey Oak Supply Store",
-    "The Rose and Crown Pub": "The Rose and Crown Pub",
-    "Hobbs Cafe": "Hobbs Cafe",
-    "Johnson Park": "Johnson Park",
-    "Town Hall": "Town Hall",
-    "Library": "Library",
-    "Pharmacy": "Pharmacy"
+// Tile indices (must match generate_assets.html)
+const TILES = {
+    GRASS: 0, GRASS_DARK: 1, GRASS_FLOWERS: 2, DIRT: 3, DIRT_PATH: 4,
+    ROAD_H: 5, ROAD_V: 6, ROAD_CROSS: 7,
+    ROAD_CORNER_TL: 8, ROAD_CORNER_TR: 9, ROAD_CORNER_BL: 10, ROAD_CORNER_BR: 11,
+    ROAD_T_UP: 12, ROAD_T_DOWN: 13, ROAD_T_LEFT: 14, ROAD_T_RIGHT: 15,
+    WATER: 16, WATER_EDGE_T: 17, WATER_EDGE_B: 18, WATER_EDGE_L: 19, WATER_EDGE_R: 20,
+    TREE_TOP: 21, TREE_BOTTOM: 22, BUSH: 23,
+    FLOWERS_RED: 24, FLOWERS_YELLOW: 25, FLOWERS_BLUE: 26, ROCK: 27,
+    FENCE_H: 28, FENCE_V: 29, FENCE_CORNER: 30, FENCE_POST: 31,
+    WALL_BROWN_TL: 32, WALL_BROWN_T: 33, WALL_BROWN_TR: 34,
+    WALL_BROWN_L: 35, WALL_BROWN_C: 36, WALL_BROWN_R: 37,
+    WALL_BROWN_BL: 38, WALL_BROWN_B: 39, WALL_BROWN_BR: 40,
+    DOOR_BROWN: 41, WINDOW_BROWN: 42,
+    ROOF_BROWN_L: 43, ROOF_BROWN_C: 44, ROOF_BROWN_R: 45, ROOF_BROWN_PEAK: 46, CHIMNEY: 47,
+    WALL_GRAY_TL: 48, WALL_GRAY_T: 49, WALL_GRAY_TR: 50,
+    WALL_GRAY_L: 51, WALL_GRAY_C: 52, WALL_GRAY_R: 53,
+    WALL_GRAY_BL: 54, WALL_GRAY_B: 55, WALL_GRAY_BR: 56,
+    DOOR_GRAY: 57, WINDOW_GRAY: 58,
+    ROOF_GRAY_L: 59, ROOF_GRAY_C: 60, ROOF_GRAY_R: 61, PILLAR: 62, ARCH: 63,
+    WALL_RED_TL: 64, WALL_RED_T: 65, WALL_RED_TR: 66,
+    WALL_RED_L: 67, WALL_RED_C: 68, WALL_RED_R: 69,
+    WALL_RED_BL: 70, WALL_RED_B: 71, WALL_RED_BR: 72,
+    DOOR_RED: 73, WINDOW_RED: 74,
+    ROOF_RED_L: 75, ROOF_RED_C: 76, ROOF_RED_R: 77, SIGN_PUB: 78, SIGN_CAFE: 79,
+    WALL_BLUE_TL: 80, WALL_BLUE_T: 81, WALL_BLUE_TR: 82,
+    WALL_BLUE_L: 83, WALL_BLUE_C: 84, WALL_BLUE_R: 85,
+    WALL_BLUE_BL: 86, WALL_BLUE_B: 87, WALL_BLUE_BR: 88,
+    DOOR_BLUE: 89, WINDOW_BLUE: 90,
+    ROOF_BLUE_L: 91, ROOF_BLUE_C: 92, ROOF_BLUE_R: 93, SIGN_COLLEGE: 94, SIGN_STORE: 95,
+    PARK_GRASS: 96, PARK_BENCH: 97, PARK_LAMP: 98,
+    FOUNTAIN_TL: 99, FOUNTAIN_TR: 100, FOUNTAIN_BL: 101, FOUNTAIN_BR: 102,
+    PLAYGROUND: 103,
+    POND_TL: 104, POND_TR: 105, POND_BL: 106, POND_BR: 107,
+    BRIDGE_H: 108, BRIDGE_V: 109, GAZEBO_TOP: 110, GAZEBO_BOTTOM: 111,
+    FLOOR_WOOD: 112, FLOOR_TILE: 113, FLOOR_CARPET: 114, FLOOR_STONE: 115,
+    COUNTER: 116, TABLE: 117, CHAIR_L: 118, CHAIR_R: 119,
+    BED_T: 120, BED_B: 121, BOOKSHELF: 122, PLANT_POT: 123,
+    LAMP_FLOOR: 124, RUG: 125, STAIRS_U: 126, STAIRS_D: 127
 };
 
-function initMap(canvasId) {
-    canvas = document.getElementById(canvasId);
-    if (!canvas) {
-        console.error('Canvas element not found:', canvasId);
+// Building definitions with tile positions and entrance points
+const BUILDINGS = {
+    "Lin Family Home": {
+        x: 3, y: 3, width: 6, height: 5,
+        entrance: { x: 5, y: 8 },
+        wallType: 'brown', label: "Lin Home"
+    },
+    "Moreno Family Home": {
+        x: 12, y: 3, width: 6, height: 5,
+        entrance: { x: 14, y: 8 },
+        wallType: 'brown', label: "Moreno Home"
+    },
+    "Moore Family Home": {
+        x: 21, y: 3, width: 6, height: 5,
+        entrance: { x: 23, y: 8 },
+        wallType: 'brown', label: "Moore Home"
+    },
+    "The Willows": {
+        x: 30, y: 3, width: 8, height: 6,
+        entrance: { x: 33, y: 9 },
+        wallType: 'brown', label: "The Willows"
+    },
+    "Library": {
+        x: 3, y: 14, width: 7, height: 5,
+        entrance: { x: 6, y: 19 },
+        wallType: 'gray', label: "Library"
+    },
+    "Town Hall": {
+        x: 13, y: 14, width: 8, height: 6,
+        entrance: { x: 16, y: 20 },
+        wallType: 'gray', label: "Town Hall"
+    },
+    "Pharmacy": {
+        x: 24, y: 14, width: 5, height: 5,
+        entrance: { x: 26, y: 19 },
+        wallType: 'gray', label: "Pharmacy"
+    },
+    "Harvey Oak Supply Store": {
+        x: 32, y: 14, width: 7, height: 5,
+        entrance: { x: 35, y: 19 },
+        wallType: 'blue', label: "Supply Store"
+    },
+    "The Rose and Crown Pub": {
+        x: 3, y: 26, width: 7, height: 5,
+        entrance: { x: 6, y: 31 },
+        wallType: 'red', label: "Pub"
+    },
+    "Hobbs Cafe": {
+        x: 13, y: 26, width: 6, height: 5,
+        entrance: { x: 15, y: 31 },
+        wallType: 'red', label: "Cafe"
+    },
+    "Johnson Park": {
+        x: 22, y: 25, width: 10, height: 8,
+        entrance: { x: 27, y: 33 },
+        wallType: 'park', label: "Johnson Park"
+    },
+    "Oak Hill College": {
+        x: 44, y: 14, width: 12, height: 8,
+        entrance: { x: 49, y: 22 },
+        wallType: 'blue', label: "Oak Hill College"
+    }
+};
+
+// ============================================================================
+// PHASER GAME CONFIGURATION
+// ============================================================================
+
+let phaserGame = null;
+let mainScene = null;
+
+// ============================================================================
+// MAIN SCENE
+// ============================================================================
+
+class SmallvilleScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'SmallvilleScene' });
+        this.agents = {};
+        this.agentSprites = {};
+        this.agentBubbles = {};
+        this.buildingLabels = {};
+        this.highlightedAgent = null;
+        this.walkableGrid = [];
+        this.dayNightOverlay = null;
+        this.currentHour = 8;
+        this.conversationIndicators = {};
+    }
+
+    preload() {
+        // Load tileset
+        this.load.image('tileset', '/static/assets/tileset.png');
+        // Load character spritesheet
+        this.load.spritesheet('character', '/static/assets/characters.png', {
+            frameWidth: 16,
+            frameHeight: 16
+        });
+    }
+
+    create() {
+        // Store reference
+        mainScene = this;
+
+        // Generate tilemap data
+        this.generateTilemap();
+
+        // Create tilemap
+        this.createTilemap();
+
+        // Create building labels
+        this.createBuildingLabels();
+
+        // Create agent animations
+        this.createAnimations();
+
+        // Setup camera controls
+        this.setupCamera();
+
+        // Create day/night overlay
+        this.createDayNightOverlay();
+
+        // Setup input handlers
+        this.setupInputHandlers();
+
+        // Initialize agents at their default positions
+        this.initializeAgents();
+    }
+
+    update(time, delta) {
+        // Update agent movements
+        this.updateAgentMovements(delta);
+
+        // Update speech bubbles positions
+        this.updateBubbles();
+    }
+
+    // ========================================================================
+    // TILEMAP GENERATION
+    // ========================================================================
+
+    generateTilemap() {
+        // Create base ground layer (all grass)
+        this.groundData = [];
+        this.buildingData = [];
+        this.decorData = [];
+
+        for (let y = 0; y < MAP_HEIGHT; y++) {
+            this.groundData[y] = [];
+            this.buildingData[y] = [];
+            this.decorData[y] = [];
+            for (let x = 0; x < MAP_WIDTH; x++) {
+                // Vary grass tiles
+                const grassVariant = Math.random() < 0.1 ? TILES.GRASS_DARK :
+                                    Math.random() < 0.05 ? TILES.GRASS_FLOWERS : TILES.GRASS;
+                this.groundData[y][x] = grassVariant;
+                this.buildingData[y][x] = -1;
+                this.decorData[y][x] = -1;
+            }
+        }
+
+        // Create walkable grid for pathfinding
+        this.walkableGrid = [];
+        for (let y = 0; y < MAP_HEIGHT; y++) {
+            this.walkableGrid[y] = [];
+            for (let x = 0; x < MAP_WIDTH; x++) {
+                this.walkableGrid[y][x] = true; // Default walkable
+            }
+        }
+
+        // Draw roads
+        this.drawRoads();
+
+        // Draw buildings
+        this.drawBuildings();
+
+        // Draw park
+        this.drawPark();
+
+        // Add decorations (trees, bushes)
+        this.addDecorations();
+    }
+
+    drawRoads() {
+        // Main horizontal roads
+        const roadRows = [10, 11, 22, 23, 34, 35];
+
+        for (const row of roadRows) {
+            if (row >= MAP_HEIGHT) continue;
+            for (let x = 0; x < MAP_WIDTH; x++) {
+                this.groundData[row][x] = TILES.ROAD_H;
+            }
+        }
+
+        // Main vertical roads
+        const roadCols = [10, 11, 28, 29, 42, 43];
+
+        for (const col of roadCols) {
+            if (col >= MAP_WIDTH) continue;
+            for (let y = 0; y < MAP_HEIGHT; y++) {
+                // Handle intersections
+                if (roadRows.includes(y)) {
+                    this.groundData[y][col] = TILES.ROAD_CROSS;
+                } else {
+                    this.groundData[y][col] = TILES.ROAD_V;
+                }
+            }
+        }
+    }
+
+    drawBuildings() {
+        for (const [name, building] of Object.entries(BUILDINGS)) {
+            if (building.wallType === 'park') continue; // Park handled separately
+
+            const { x, y, width, height, wallType, entrance } = building;
+
+            // Get wall tiles based on type
+            let wallTiles;
+            switch (wallType) {
+                case 'brown':
+                    wallTiles = {
+                        tl: TILES.WALL_BROWN_TL, t: TILES.WALL_BROWN_T, tr: TILES.WALL_BROWN_TR,
+                        l: TILES.WALL_BROWN_L, c: TILES.WALL_BROWN_C, r: TILES.WALL_BROWN_R,
+                        bl: TILES.WALL_BROWN_BL, b: TILES.WALL_BROWN_B, br: TILES.WALL_BROWN_BR,
+                        door: TILES.DOOR_BROWN, window: TILES.WINDOW_BROWN,
+                        roofL: TILES.ROOF_BROWN_L, roofC: TILES.ROOF_BROWN_C, roofR: TILES.ROOF_BROWN_R
+                    };
+                    break;
+                case 'gray':
+                    wallTiles = {
+                        tl: TILES.WALL_GRAY_TL, t: TILES.WALL_GRAY_T, tr: TILES.WALL_GRAY_TR,
+                        l: TILES.WALL_GRAY_L, c: TILES.WALL_GRAY_C, r: TILES.WALL_GRAY_R,
+                        bl: TILES.WALL_GRAY_BL, b: TILES.WALL_GRAY_B, br: TILES.WALL_GRAY_BR,
+                        door: TILES.DOOR_GRAY, window: TILES.WINDOW_GRAY,
+                        roofL: TILES.ROOF_GRAY_L, roofC: TILES.ROOF_GRAY_C, roofR: TILES.ROOF_GRAY_R
+                    };
+                    break;
+                case 'red':
+                    wallTiles = {
+                        tl: TILES.WALL_RED_TL, t: TILES.WALL_RED_T, tr: TILES.WALL_RED_TR,
+                        l: TILES.WALL_RED_L, c: TILES.WALL_RED_C, r: TILES.WALL_RED_R,
+                        bl: TILES.WALL_RED_BL, b: TILES.WALL_RED_B, br: TILES.WALL_RED_BR,
+                        door: TILES.DOOR_RED, window: TILES.WINDOW_RED,
+                        roofL: TILES.ROOF_RED_L, roofC: TILES.ROOF_RED_C, roofR: TILES.ROOF_RED_R
+                    };
+                    break;
+                case 'blue':
+                    wallTiles = {
+                        tl: TILES.WALL_BLUE_TL, t: TILES.WALL_BLUE_T, tr: TILES.WALL_BLUE_TR,
+                        l: TILES.WALL_BLUE_L, c: TILES.WALL_BLUE_C, r: TILES.WALL_BLUE_R,
+                        bl: TILES.WALL_BLUE_BL, b: TILES.WALL_BLUE_B, br: TILES.WALL_BLUE_BR,
+                        door: TILES.DOOR_BLUE, window: TILES.WINDOW_BLUE,
+                        roofL: TILES.ROOF_BLUE_L, roofC: TILES.ROOF_BLUE_C, roofR: TILES.ROOF_BLUE_R
+                    };
+                    break;
+            }
+
+            // Draw roof (1 row above building)
+            const roofY = y - 1;
+            if (roofY >= 0) {
+                this.buildingData[roofY][x] = wallTiles.roofL;
+                for (let rx = x + 1; rx < x + width - 1; rx++) {
+                    if (rx < MAP_WIDTH) this.buildingData[roofY][rx] = wallTiles.roofC;
+                }
+                if (x + width - 1 < MAP_WIDTH) this.buildingData[roofY][x + width - 1] = wallTiles.roofR;
+            }
+
+            // Draw building walls
+            for (let by = y; by < y + height && by < MAP_HEIGHT; by++) {
+                for (let bx = x; bx < x + width && bx < MAP_WIDTH; bx++) {
+                    let tile;
+                    const isTop = by === y;
+                    const isBottom = by === y + height - 1;
+                    const isLeft = bx === x;
+                    const isRight = bx === x + width - 1;
+
+                    // Check if this is the door position
+                    const isDoor = bx === entrance.x && by === y + height - 1;
+
+                    if (isDoor) {
+                        tile = wallTiles.door;
+                    } else if (isTop && isLeft) {
+                        tile = wallTiles.tl;
+                    } else if (isTop && isRight) {
+                        tile = wallTiles.tr;
+                    } else if (isBottom && isLeft) {
+                        tile = wallTiles.bl;
+                    } else if (isBottom && isRight) {
+                        tile = wallTiles.br;
+                    } else if (isTop) {
+                        tile = wallTiles.t;
+                    } else if (isBottom) {
+                        tile = wallTiles.b;
+                    } else if (isLeft) {
+                        tile = wallTiles.l;
+                    } else if (isRight) {
+                        tile = wallTiles.r;
+                    } else {
+                        // Interior - add windows sometimes
+                        tile = (bx + by) % 3 === 0 ? wallTiles.window : wallTiles.c;
+                    }
+
+                    this.buildingData[by][bx] = tile;
+                    // Buildings are not walkable (except doors are semi-walkable for pathfinding)
+                    if (!isDoor) {
+                        this.walkableGrid[by][bx] = false;
+                    }
+                }
+            }
+        }
+    }
+
+    drawPark() {
+        const park = BUILDINGS["Johnson Park"];
+        const { x, y, width, height } = park;
+
+        // Park is special - it's walkable green space
+        for (let py = y; py < y + height && py < MAP_HEIGHT; py++) {
+            for (let px = x; px < x + width && px < MAP_WIDTH; px++) {
+                this.groundData[py][px] = TILES.PARK_GRASS;
+            }
+        }
+
+        // Add pond in center
+        const pondX = x + 3;
+        const pondY = y + 2;
+        this.decorData[pondY][pondX] = TILES.POND_TL;
+        this.decorData[pondY][pondX + 1] = TILES.POND_TR;
+        this.decorData[pondY + 1][pondX] = TILES.POND_BL;
+        this.decorData[pondY + 1][pondX + 1] = TILES.POND_BR;
+        // Pond not walkable
+        this.walkableGrid[pondY][pondX] = false;
+        this.walkableGrid[pondY][pondX + 1] = false;
+        this.walkableGrid[pondY + 1][pondX] = false;
+        this.walkableGrid[pondY + 1][pondX + 1] = false;
+
+        // Add benches
+        this.decorData[y + 1][x + 1] = TILES.PARK_BENCH;
+        this.decorData[y + height - 2][x + width - 2] = TILES.PARK_BENCH;
+
+        // Add lamp
+        this.decorData[y + height - 2][x + 1] = TILES.PARK_LAMP;
+
+        // Add playground
+        this.decorData[y + 4][x + 6] = TILES.PLAYGROUND;
+    }
+
+    addDecorations() {
+        // Add trees around the map edges
+        const treePositions = [
+            [1, 1], [1, 12], [1, 25], [1, 37],
+            [57, 1], [57, 12], [57, 25], [57, 37],
+            [20, 1], [40, 1],
+            [20, 37], [50, 37]
+        ];
+
+        for (const [tx, ty] of treePositions) {
+            if (tx < MAP_WIDTH && ty < MAP_HEIGHT && ty > 0) {
+                this.decorData[ty - 1][tx] = TILES.TREE_TOP;
+                this.decorData[ty][tx] = TILES.TREE_BOTTOM;
+                this.walkableGrid[ty - 1][tx] = false;
+                this.walkableGrid[ty][tx] = false;
+            }
+        }
+
+        // Add bushes near buildings
+        for (const building of Object.values(BUILDINGS)) {
+            if (building.wallType === 'park') continue;
+            // Add bush near entrance
+            const bushX = building.entrance.x + 2;
+            const bushY = building.entrance.y;
+            if (bushX < MAP_WIDTH && bushY < MAP_HEIGHT &&
+                this.groundData[bushY][bushX] === TILES.GRASS) {
+                this.decorData[bushY][bushX] = TILES.BUSH;
+            }
+        }
+
+        // Add flower patches
+        const flowerPositions = [
+            [5, 12, TILES.FLOWERS_RED],
+            [15, 12, TILES.FLOWERS_YELLOW],
+            [25, 12, TILES.FLOWERS_BLUE],
+            [35, 24, TILES.FLOWERS_RED]
+        ];
+
+        for (const [fx, fy, tile] of flowerPositions) {
+            if (fx < MAP_WIDTH && fy < MAP_HEIGHT &&
+                this.groundData[fy][fx] === TILES.GRASS) {
+                this.decorData[fy][fx] = tile;
+            }
+        }
+    }
+
+    createTilemap() {
+        // Create tilemap from data
+        const mapData = {
+            width: MAP_WIDTH,
+            height: MAP_HEIGHT,
+            tilewidth: TILE_SIZE,
+            tileheight: TILE_SIZE
+        };
+
+        this.map = this.make.tilemap({
+            tileWidth: TILE_SIZE,
+            tileHeight: TILE_SIZE,
+            width: MAP_WIDTH,
+            height: MAP_HEIGHT
+        });
+
+        // Add tileset image
+        const tileset = this.map.addTilesetImage('tileset', 'tileset', TILE_SIZE, TILE_SIZE, 0, 0);
+
+        // Create ground layer
+        this.groundLayer = this.map.createBlankLayer('ground', tileset);
+        for (let y = 0; y < MAP_HEIGHT; y++) {
+            for (let x = 0; x < MAP_WIDTH; x++) {
+                this.groundLayer.putTileAt(this.groundData[y][x], x, y);
+            }
+        }
+
+        // Create building layer
+        this.buildingLayer = this.map.createBlankLayer('buildings', tileset);
+        for (let y = 0; y < MAP_HEIGHT; y++) {
+            for (let x = 0; x < MAP_WIDTH; x++) {
+                if (this.buildingData[y][x] >= 0) {
+                    this.buildingLayer.putTileAt(this.buildingData[y][x], x, y);
+                }
+            }
+        }
+
+        // Create decoration layer
+        this.decorLayer = this.map.createBlankLayer('decor', tileset);
+        for (let y = 0; y < MAP_HEIGHT; y++) {
+            for (let x = 0; x < MAP_WIDTH; x++) {
+                if (this.decorData[y][x] >= 0) {
+                    this.decorLayer.putTileAt(this.decorData[y][x], x, y);
+                }
+            }
+        }
+
+        // Set world bounds
+        this.physics.world.setBounds(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE);
+    }
+
+    createBuildingLabels() {
+        for (const [name, building] of Object.entries(BUILDINGS)) {
+            const labelX = (building.x + building.width / 2) * TILE_SIZE;
+            const labelY = (building.y - 1.5) * TILE_SIZE;
+
+            const label = this.add.text(labelX, labelY, building.label, {
+                fontSize: '10px',
+                fontFamily: 'Arial',
+                color: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 3,
+                align: 'center'
+            }).setOrigin(0.5, 0.5).setDepth(100);
+
+            this.buildingLabels[name] = label;
+        }
+    }
+
+    // ========================================================================
+    // ANIMATIONS
+    // ========================================================================
+
+    createAnimations() {
+        // Walk down
+        this.anims.create({
+            key: 'walk_down',
+            frames: this.anims.generateFrameNumbers('character', { frames: [0, 1] }),
+            frameRate: 6,
+            repeat: -1
+        });
+
+        // Walk left
+        this.anims.create({
+            key: 'walk_left',
+            frames: this.anims.generateFrameNumbers('character', { frames: [2, 3] }),
+            frameRate: 6,
+            repeat: -1
+        });
+
+        // Walk right
+        this.anims.create({
+            key: 'walk_right',
+            frames: this.anims.generateFrameNumbers('character', { frames: [4, 5] }),
+            frameRate: 6,
+            repeat: -1
+        });
+
+        // Walk up
+        this.anims.create({
+            key: 'walk_up',
+            frames: this.anims.generateFrameNumbers('character', { frames: [6, 7] }),
+            frameRate: 6,
+            repeat: -1
+        });
+
+        // Idle (front facing)
+        this.anims.create({
+            key: 'idle',
+            frames: [{ key: 'character', frame: 0 }],
+            frameRate: 1,
+            repeat: 0
+        });
+    }
+
+    // ========================================================================
+    // CAMERA CONTROLS
+    // ========================================================================
+
+    setupCamera() {
+        const camera = this.cameras.main;
+
+        // Set camera bounds
+        camera.setBounds(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE);
+
+        // Center camera
+        camera.centerOn(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2);
+
+        // Enable zoom
+        camera.setZoom(2);
+
+        // Mouse drag to pan
+        this.input.on('pointermove', (pointer) => {
+            if (pointer.isDown && pointer.button === 0) {
+                camera.scrollX -= (pointer.x - pointer.prevPosition.x) / camera.zoom;
+                camera.scrollY -= (pointer.y - pointer.prevPosition.y) / camera.zoom;
+            }
+        });
+
+        // Mouse wheel to zoom
+        this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
+            const zoomChange = deltaY > 0 ? -0.1 : 0.1;
+            const newZoom = Phaser.Math.Clamp(camera.zoom + zoomChange, 1, 4);
+            camera.setZoom(newZoom);
+        });
+    }
+
+    // ========================================================================
+    // DAY/NIGHT CYCLE
+    // ========================================================================
+
+    createDayNightOverlay() {
+        // Create a rectangle that covers the entire map
+        this.dayNightOverlay = this.add.rectangle(
+            MAP_WIDTH * TILE_SIZE / 2,
+            MAP_HEIGHT * TILE_SIZE / 2,
+            MAP_WIDTH * TILE_SIZE,
+            MAP_HEIGHT * TILE_SIZE,
+            0x000033,
+            0
+        ).setDepth(500);
+    }
+
+    updateDayNight(hour) {
+        this.currentHour = hour;
+
+        // Calculate alpha based on time of day
+        let alpha = 0;
+
+        if (hour >= 6 && hour < 8) {
+            // Dawn: gradually decrease darkness
+            alpha = 0.3 * (1 - (hour - 6) / 2);
+        } else if (hour >= 8 && hour < 18) {
+            // Day: no overlay
+            alpha = 0;
+        } else if (hour >= 18 && hour < 20) {
+            // Dusk: gradually increase darkness
+            alpha = 0.3 * ((hour - 18) / 2);
+        } else if (hour >= 20 || hour < 6) {
+            // Night: maximum darkness
+            alpha = 0.4;
+        }
+
+        if (this.dayNightOverlay) {
+            this.dayNightOverlay.setAlpha(alpha);
+        }
+    }
+
+    // ========================================================================
+    // INPUT HANDLERS
+    // ========================================================================
+
+    setupInputHandlers() {
+        // Click to select agent
+        this.input.on('pointerup', (pointer) => {
+            // Ignore if we were dragging
+            if (Math.abs(pointer.x - pointer.downX) > 5 || Math.abs(pointer.y - pointer.downY) > 5) {
+                return;
+            }
+
+            const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+
+            // Check if clicked on an agent
+            for (const [agentName, sprite] of Object.entries(this.agentSprites)) {
+                const bounds = sprite.getBounds();
+                if (bounds.contains(worldPoint.x, worldPoint.y)) {
+                    this.selectAgent(agentName);
+                    return;
+                }
+            }
+        });
+    }
+
+    selectAgent(agentName) {
+        // Clear previous highlight
+        if (this.highlightedAgent && this.agentSprites[this.highlightedAgent]) {
+            this.agentSprites[this.highlightedAgent].clearTint();
+            // Remove highlight circle
+            if (this.highlightCircle) {
+                this.highlightCircle.destroy();
+                this.highlightCircle = null;
+            }
+        }
+
+        this.highlightedAgent = agentName;
+
+        // Add highlight to new agent
+        if (this.agentSprites[agentName]) {
+            const sprite = this.agentSprites[agentName];
+
+            // Create highlight circle
+            this.highlightCircle = this.add.circle(sprite.x, sprite.y, 12)
+                .setStrokeStyle(2, 0xffffff)
+                .setDepth(199);
+        }
+
+        // Notify app.js
+        if (window.onAgentClick) {
+            window.onAgentClick(agentName);
+        }
+    }
+
+    // ========================================================================
+    // AGENT MANAGEMENT
+    // ========================================================================
+
+    initializeAgents() {
+        // Create sprites for all known agents at default positions
+        AGENT_NAMES.forEach((name, index) => {
+            const color = Phaser.Display.Color.HSLToColor(index / 25, 0.7, 0.55).color;
+            this.createAgentSprite(name, color);
+        });
+    }
+
+    createAgentSprite(agentName, tintColor) {
+        // Default position (will be updated when data arrives)
+        const startX = MAP_WIDTH * TILE_SIZE / 2;
+        const startY = MAP_HEIGHT * TILE_SIZE / 2;
+
+        const sprite = this.add.sprite(startX, startY, 'character')
+            .setDepth(200)
+            .setTint(tintColor)
+            .setInteractive();
+
+        sprite.agentName = agentName;
+        sprite.targetX = startX;
+        sprite.targetY = startY;
+        sprite.path = [];
+        sprite.pathIndex = 0;
+        sprite.isMoving = false;
+        sprite.tintColor = tintColor;
+
+        // Start with idle animation
+        sprite.play('idle');
+
+        this.agentSprites[agentName] = sprite;
+
+        // Create speech bubble (hidden initially)
+        const bubble = this.createSpeechBubble(agentName);
+        this.agentBubbles[agentName] = bubble;
+    }
+
+    createSpeechBubble(agentName) {
+        const container = this.add.container(0, 0).setDepth(300).setVisible(false);
+
+        // Background
+        const bg = this.add.graphics();
+        bg.fillStyle(0xffffff, 0.9);
+        bg.fillRoundedRect(-60, -30, 120, 24, 6);
+        bg.lineStyle(1, 0x333333, 1);
+        bg.strokeRoundedRect(-60, -30, 120, 24, 6);
+        // Triangle pointer
+        bg.fillStyle(0xffffff, 0.9);
+        bg.fillTriangle(-5, -6, 5, -6, 0, 2);
+
+        container.add(bg);
+
+        // Text
+        const text = this.add.text(0, -18, '', {
+            fontSize: '8px',
+            fontFamily: 'Arial',
+            color: '#333333',
+            align: 'center',
+            wordWrap: { width: 110 }
+        }).setOrigin(0.5, 0.5);
+
+        container.add(text);
+        container.textObj = text;
+        container.bgObj = bg;
+
+        return container;
+    }
+
+    updateSpeechBubble(agentName, activity) {
+        const bubble = this.agentBubbles[agentName];
+        if (!bubble) return;
+
+        if (activity && activity.length > 0) {
+            // Truncate to ~30 chars
+            let text = activity.length > 30 ? activity.substring(0, 28) + '...' : activity;
+            bubble.textObj.setText(text);
+            bubble.setVisible(true);
+        } else {
+            bubble.setVisible(false);
+        }
+    }
+
+    updateBubbles() {
+        for (const [agentName, sprite] of Object.entries(this.agentSprites)) {
+            const bubble = this.agentBubbles[agentName];
+            if (bubble && sprite) {
+                bubble.setPosition(sprite.x, sprite.y - 20);
+            }
+        }
+
+        // Update highlight circle position
+        if (this.highlightCircle && this.highlightedAgent && this.agentSprites[this.highlightedAgent]) {
+            const sprite = this.agentSprites[this.highlightedAgent];
+            this.highlightCircle.setPosition(sprite.x, sprite.y);
+        }
+
+        // Update conversation indicators
+        for (const [key, indicator] of Object.entries(this.conversationIndicators)) {
+            if (indicator.agent1 && indicator.agent2) {
+                const sprite1 = this.agentSprites[indicator.agent1];
+                const sprite2 = this.agentSprites[indicator.agent2];
+                if (sprite1 && sprite2) {
+                    indicator.setPosition(
+                        (sprite1.x + sprite2.x) / 2,
+                        (sprite1.y + sprite2.y) / 2 - 16
+                    );
+                }
+            }
+        }
+    }
+
+    // ========================================================================
+    // A* PATHFINDING
+    // ========================================================================
+
+    findPath(startX, startY, endX, endY) {
+        // Convert world coords to tile coords
+        const startTileX = Math.floor(startX / TILE_SIZE);
+        const startTileY = Math.floor(startY / TILE_SIZE);
+        const endTileX = Math.floor(endX / TILE_SIZE);
+        const endTileY = Math.floor(endY / TILE_SIZE);
+
+        // Clamp to map bounds
+        const clampedEnd = {
+            x: Phaser.Math.Clamp(endTileX, 0, MAP_WIDTH - 1),
+            y: Phaser.Math.Clamp(endTileY, 0, MAP_HEIGHT - 1)
+        };
+
+        // Simple A* implementation
+        const openSet = [];
+        const closedSet = new Set();
+        const cameFrom = {};
+
+        const start = { x: startTileX, y: startTileY, g: 0, h: 0, f: 0 };
+        start.h = this.heuristic(start, clampedEnd);
+        start.f = start.h;
+        openSet.push(start);
+
+        const getKey = (node) => `${node.x},${node.y}`;
+
+        while (openSet.length > 0) {
+            // Get node with lowest f score
+            openSet.sort((a, b) => a.f - b.f);
+            const current = openSet.shift();
+
+            // Check if we reached the goal
+            if (current.x === clampedEnd.x && current.y === clampedEnd.y) {
+                // Reconstruct path
+                const path = [];
+                let node = current;
+                while (node) {
+                    path.unshift({
+                        x: node.x * TILE_SIZE + TILE_SIZE / 2,
+                        y: node.y * TILE_SIZE + TILE_SIZE / 2
+                    });
+                    node = cameFrom[getKey(node)];
+                }
+                return path;
+            }
+
+            closedSet.add(getKey(current));
+
+            // Check neighbors (4-directional)
+            const neighbors = [
+                { x: current.x + 1, y: current.y },
+                { x: current.x - 1, y: current.y },
+                { x: current.x, y: current.y + 1 },
+                { x: current.x, y: current.y - 1 }
+            ];
+
+            for (const neighbor of neighbors) {
+                // Check bounds
+                if (neighbor.x < 0 || neighbor.x >= MAP_WIDTH ||
+                    neighbor.y < 0 || neighbor.y >= MAP_HEIGHT) {
+                    continue;
+                }
+
+                // Check if walkable
+                if (!this.walkableGrid[neighbor.y][neighbor.x]) {
+                    continue;
+                }
+
+                const key = getKey(neighbor);
+                if (closedSet.has(key)) {
+                    continue;
+                }
+
+                const g = current.g + 1;
+                const h = this.heuristic(neighbor, clampedEnd);
+                const f = g + h;
+
+                // Check if already in open set with better score
+                const existing = openSet.find(n => n.x === neighbor.x && n.y === neighbor.y);
+                if (existing && existing.g <= g) {
+                    continue;
+                }
+
+                if (existing) {
+                    existing.g = g;
+                    existing.f = f;
+                    cameFrom[key] = current;
+                } else {
+                    openSet.push({ x: neighbor.x, y: neighbor.y, g, h, f });
+                    cameFrom[key] = current;
+                }
+            }
+        }
+
+        // No path found - return direct line
+        return [
+            { x: startX, y: startY },
+            { x: clampedEnd.x * TILE_SIZE + TILE_SIZE / 2, y: clampedEnd.y * TILE_SIZE + TILE_SIZE / 2 }
+        ];
+    }
+
+    heuristic(a, b) {
+        // Manhattan distance
+        return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+    }
+
+    // ========================================================================
+    // AGENT MOVEMENT
+    // ========================================================================
+
+    moveAgentTo(agentName, location) {
+        const sprite = this.agentSprites[agentName];
+        if (!sprite) return;
+
+        const building = BUILDINGS[location];
+        if (!building) return;
+
+        const targetX = building.entrance.x * TILE_SIZE + TILE_SIZE / 2;
+        const targetY = building.entrance.y * TILE_SIZE + TILE_SIZE / 2;
+
+        // Find path to location
+        const path = this.findPath(sprite.x, sprite.y, targetX, targetY);
+
+        sprite.path = path;
+        sprite.pathIndex = 0;
+        sprite.isMoving = path.length > 1;
+
+        if (sprite.isMoving) {
+            this.updateAgentAnimation(sprite);
+        }
+    }
+
+    updateAgentMovements(delta) {
+        const speed = 0.05; // Tiles per millisecond
+
+        for (const [agentName, sprite] of Object.entries(this.agentSprites)) {
+            if (!sprite.isMoving || !sprite.path || sprite.path.length === 0) {
+                continue;
+            }
+
+            const target = sprite.path[sprite.pathIndex];
+            if (!target) {
+                sprite.isMoving = false;
+                sprite.play('idle');
+                continue;
+            }
+
+            const dx = target.x - sprite.x;
+            const dy = target.y - sprite.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < 2) {
+                // Reached waypoint
+                sprite.pathIndex++;
+                if (sprite.pathIndex >= sprite.path.length) {
+                    sprite.isMoving = false;
+                    sprite.play('idle');
+                } else {
+                    this.updateAgentAnimation(sprite);
+                }
+            } else {
+                // Move towards target
+                const moveX = (dx / distance) * speed * delta;
+                const moveY = (dy / distance) * speed * delta;
+
+                sprite.x += moveX;
+                sprite.y += moveY;
+            }
+        }
+    }
+
+    updateAgentAnimation(sprite) {
+        if (!sprite.path || sprite.pathIndex >= sprite.path.length) return;
+
+        const target = sprite.path[sprite.pathIndex];
+        const dx = target.x - sprite.x;
+        const dy = target.y - sprite.y;
+
+        // Determine direction
+        if (Math.abs(dx) > Math.abs(dy)) {
+            sprite.play(dx > 0 ? 'walk_right' : 'walk_left', true);
+        } else {
+            sprite.play(dy > 0 ? 'walk_down' : 'walk_up', true);
+        }
+    }
+
+    // ========================================================================
+    // CONVERSATION INDICATORS
+    // ========================================================================
+
+    showConversationIndicator(agent1, agent2) {
+        const key = [agent1, agent2].sort().join('|');
+
+        if (this.conversationIndicators[key]) {
+            return; // Already showing
+        }
+
+        // Create chat icon
+        const indicator = this.add.text(0, 0, '💬', {
+            fontSize: '12px'
+        }).setOrigin(0.5, 0.5).setDepth(400);
+
+        indicator.agent1 = agent1;
+        indicator.agent2 = agent2;
+
+        this.conversationIndicators[key] = indicator;
+    }
+
+    hideConversationIndicator(agent1, agent2) {
+        const key = [agent1, agent2].sort().join('|');
+
+        if (this.conversationIndicators[key]) {
+            this.conversationIndicators[key].destroy();
+            delete this.conversationIndicators[key];
+        }
+    }
+
+    clearAllConversationIndicators() {
+        for (const key of Object.keys(this.conversationIndicators)) {
+            this.conversationIndicators[key].destroy();
+        }
+        this.conversationIndicators = {};
+    }
+
+    // ========================================================================
+    // EXTERNAL API (called by app.js)
+    // ========================================================================
+
+    updateFromTick(agents, locations, conversations, simTime) {
+        // Update time of day
+        if (simTime) {
+            const date = new Date(simTime);
+            this.updateDayNight(date.getHours());
+        }
+
+        // Clear old conversation indicators
+        this.clearAllConversationIndicators();
+
+        // Show active conversation indicators
+        if (conversations) {
+            for (const convo of conversations) {
+                this.showConversationIndicator(convo.agent1, convo.agent2);
+            }
+        }
+
+        // Update agent positions and activities
+        if (!agents) return;
+
+        for (const [agentName, agentData] of Object.entries(agents)) {
+            const sprite = this.agentSprites[agentName];
+            if (!sprite) continue;
+
+            // Update activity bubble
+            this.updateSpeechBubble(agentName, agentData.activity);
+
+            // Check if location changed - if so, pathfind to new location
+            const currentLocation = sprite.currentLocation;
+            const newLocation = agentData.location;
+
+            if (newLocation && newLocation !== currentLocation) {
+                sprite.currentLocation = newLocation;
+                this.moveAgentTo(agentName, newLocation);
+            }
+        }
+    }
+}
+
+// ============================================================================
+// INITIALIZATION & EXPORTS
+// ============================================================================
+
+function initMap(containerId) {
+    // Get container element
+    const container = document.getElementById('phaser-container');
+    if (!container) {
+        console.error('Phaser container not found');
         return;
     }
 
-    ctx = canvas.getContext('2d');
-
-    // Create tooltip element
-    tooltip = document.createElement('div');
-    tooltip.id = 'map-tooltip';
-    tooltip.style.position = 'absolute';
-    tooltip.style.background = '#1a1a2e';
-    tooltip.style.color = 'white';
-    tooltip.style.padding = '8px 12px';
-    tooltip.style.borderRadius = '6px';
-    tooltip.style.fontSize = '12px';
-    tooltip.style.pointerEvents = 'none';
-    tooltip.style.display = 'none';
-    tooltip.style.zIndex = '1000';
-    tooltip.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-    document.body.appendChild(tooltip);
-
-    // Assign agent colors
-    assignAgentColors();
-
-    // Setup responsive canvas
-    handleResize();
-
-    // Event listeners
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('click', handleClick);
-    canvas.addEventListener('mouseleave', hideTooltip);
-    window.addEventListener('resize', handleResize);
-
-    // Start animation loop
-    animate();
-}
-
-function assignAgentColors() {
-    AGENT_NAMES.forEach((name, i) => {
-        agentColors[name] = `hsl(${i * (360/25)}, 70%, 55%)`;
-        agentPositions[name] = { x: 0, y: 0, targetX: 0, targetY: 0 };
-    });
-}
-
-function handleResize() {
-    const container = canvas.parentElement;
-    const dpr = window.devicePixelRatio || 1;
-
-    // Get container size
+    // Get container dimensions
     const rect = container.getBoundingClientRect();
-    canvasWidth = rect.width;
-    canvasHeight = rect.height;
 
-    // Set display size
-    canvas.style.width = canvasWidth + 'px';
-    canvas.style.height = canvasHeight + 'px';
-
-    // Set actual size in memory (scaled for retina)
-    scale = dpr;
-    canvas.width = canvasWidth * dpr;
-    canvas.height = canvasHeight * dpr;
-
-    // Scale context
-    ctx.scale(dpr, dpr);
-
-    // Recalculate layout
-    calculateLayout();
-}
-
-function calculateLayout() {
-    buildings = [];
-
-    // Grid layout: 3 rows, 4 columns
-    const margin = 40;
-    const roadWidth = 20;
-    const cols = 4;
-    const rows = 3;
-
-    const availableWidth = canvasWidth - (2 * margin) - (roadWidth * (cols - 1));
-    const availableHeight = canvasHeight - (2 * margin) - (roadWidth * (rows - 1));
-
-    const buildingWidth = availableWidth / cols;
-    const buildingHeight = availableHeight / rows;
-    const roofHeight = buildingHeight * 0.25;
-
-    // Row 1: Residential
-    buildings.push({
-        name: "Lin Family Home",
-        x: margin,
-        y: margin,
-        w: buildingWidth * 0.8,
-        h: buildingHeight * 0.7,
-        color: "#8B6914",
-        roofColor: "#654321",
-        label: "Lin Home"
-    });
-
-    buildings.push({
-        name: "Moreno Family Home",
-        x: margin + (buildingWidth + roadWidth),
-        y: margin,
-        w: buildingWidth * 0.8,
-        h: buildingHeight * 0.7,
-        color: "#A0522D",
-        roofColor: "#6B3410",
-        label: "Moreno Home"
-    });
-
-    buildings.push({
-        name: "Moore Family Home",
-        x: margin + 2 * (buildingWidth + roadWidth),
-        y: margin,
-        w: buildingWidth * 0.8,
-        h: buildingHeight * 0.7,
-        color: "#CD853F",
-        roofColor: "#8B5A2B",
-        label: "Moore Home"
-    });
-
-    buildings.push({
-        name: "The Willows",
-        x: margin + 3 * (buildingWidth + roadWidth),
-        y: margin,
-        w: buildingWidth * 0.85,
-        h: buildingHeight * 0.75,
-        color: "#DEB887",
-        roofColor: "#BC9162",
-        label: "The Willows"
-    });
-
-    // Row 2: Commercial/Public
-    const row2Y = margin + buildingHeight + roadWidth;
-
-    buildings.push({
-        name: "Library",
-        x: margin,
-        y: row2Y,
-        w: buildingWidth * 0.85,
-        h: buildingHeight * 0.75,
-        color: "#708090",
-        roofColor: "#556677",
-        label: "Library"
-    });
-
-    buildings.push({
-        name: "Town Hall",
-        x: margin + (buildingWidth + roadWidth),
-        y: row2Y,
-        w: buildingWidth * 0.9,
-        h: buildingHeight * 0.8,
-        color: "#778899",
-        roofColor: "#5F6B7A",
-        label: "Town Hall"
-    });
-
-    buildings.push({
-        name: "Pharmacy",
-        x: margin + 2 * (buildingWidth + roadWidth),
-        y: row2Y,
-        w: buildingWidth * 0.75,
-        h: buildingHeight * 0.7,
-        color: "#5F9EA0",
-        roofColor: "#4A7A7C",
-        label: "Pharmacy"
-    });
-
-    buildings.push({
-        name: "Harvey Oak Supply Store",
-        x: margin + 3 * (buildingWidth + roadWidth),
-        y: row2Y,
-        w: buildingWidth * 0.85,
-        h: buildingHeight * 0.75,
-        color: "#4682B4",
-        roofColor: "#36648B",
-        label: "Supply Store"
-    });
-
-    // Row 3: Social
-    const row3Y = margin + 2 * (buildingHeight + roadWidth);
-
-    buildings.push({
-        name: "The Rose and Crown Pub",
-        x: margin,
-        y: row3Y,
-        w: buildingWidth * 0.85,
-        h: buildingHeight * 0.75,
-        color: "#B22222",
-        roofColor: "#8B1A1A",
-        label: "Pub"
-    });
-
-    buildings.push({
-        name: "Hobbs Cafe",
-        x: margin + (buildingWidth + roadWidth),
-        y: row3Y,
-        w: buildingWidth * 0.8,
-        h: buildingHeight * 0.7,
-        color: "#D2691E",
-        roofColor: "#A0521E",
-        label: "Cafe"
-    });
-
-    buildings.push({
-        name: "Johnson Park",
-        x: margin + 2 * (buildingWidth + roadWidth),
-        y: row3Y,
-        w: buildingWidth * 0.9,
-        h: buildingHeight * 0.75,
-        color: "#228B22",
-        roofColor: "#1B6B1B",
-        label: "Park"
-    });
-
-    buildings.push({
-        name: "Oak Hill College",
-        x: margin + 3 * (buildingWidth + roadWidth),
-        y: row3Y,
-        w: buildingWidth * 0.9,
-        h: buildingHeight * 0.8,
-        color: "#4169E1",
-        roofColor: "#2F4F9F",
-        label: "College"
-    });
-}
-
-function drawMap() {
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-
-    drawGround();
-    drawRoads();
-
-    buildings.forEach(building => {
-        drawBuilding(building);
-    });
-
-    drawDecorations();
-}
-
-function drawGround() {
-    // Base green
-    ctx.fillStyle = '#2d5a27';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-    // Add grass texture
-    ctx.fillStyle = '#264521';
-    for (let i = 0; i < 1000; i++) {
-        const x = Math.random() * canvasWidth;
-        const y = Math.random() * canvasHeight;
-        const size = Math.random() * 2;
-        ctx.fillRect(x, y, size, size);
-    }
-
-    ctx.fillStyle = '#336633';
-    for (let i = 0; i < 800; i++) {
-        const x = Math.random() * canvasWidth;
-        const y = Math.random() * canvasHeight;
-        const size = Math.random() * 2;
-        ctx.fillRect(x, y, size, size);
-    }
-}
-
-function drawRoads() {
-    ctx.fillStyle = '#666666';
-
-    const margin = 40;
-    const roadWidth = 20;
-
-    // Horizontal roads
-    const buildingHeight = (canvasHeight - 2 * margin - 2 * roadWidth) / 3;
-
-    // Road after row 1
-    ctx.fillRect(0, margin + buildingHeight, canvasWidth, roadWidth);
-
-    // Road after row 2
-    ctx.fillRect(0, margin + 2 * buildingHeight + roadWidth, canvasWidth, roadWidth);
-
-    // Center lines
-    ctx.strokeStyle = '#888888';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([5, 5]);
-
-    ctx.beginPath();
-    ctx.moveTo(0, margin + buildingHeight + roadWidth / 2);
-    ctx.lineTo(canvasWidth, margin + buildingHeight + roadWidth / 2);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(0, margin + 2 * buildingHeight + roadWidth + roadWidth / 2);
-    ctx.lineTo(canvasWidth, margin + 2 * buildingHeight + roadWidth + roadWidth / 2);
-    ctx.stroke();
-
-    ctx.setLineDash([]);
-
-    // Vertical roads between columns
-    const buildingWidth = (canvasWidth - 2 * margin - 3 * roadWidth) / 4;
-
-    for (let i = 0; i < 3; i++) {
-        const x = margin + (i + 1) * buildingWidth + i * roadWidth;
-        ctx.fillRect(x, 0, roadWidth, canvasHeight);
-    }
-}
-
-function drawBuilding(building) {
-    const { x, y, w, h, color, roofColor, label } = building;
-
-    // Building body
-    ctx.fillStyle = color;
-    ctx.fillRect(x, y, w, h);
-
-    // Roof (triangle)
-    ctx.fillStyle = roofColor;
-    ctx.beginPath();
-    ctx.moveTo(x - 5, y);
-    ctx.lineTo(x + w / 2, y - h * 0.25);
-    ctx.lineTo(x + w + 5, y);
-    ctx.closePath();
-    ctx.fill();
-
-    // Windows (2x2 grid)
-    ctx.fillStyle = '#FFE4B5';
-    const windowSize = Math.min(w * 0.15, 12);
-    const windowSpacingX = w / 3;
-    const windowSpacingY = h / 3;
-
-    for (let row = 0; row < 2; row++) {
-        for (let col = 0; col < 2; col++) {
-            const wx = x + windowSpacingX * (col + 0.7);
-            const wy = y + windowSpacingY * (row + 0.5);
-            ctx.fillRect(wx, wy, windowSize, windowSize);
-
-            // Window pane divider
-            ctx.strokeStyle = '#D4A574';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(wx + windowSize / 2, wy);
-            ctx.lineTo(wx + windowSize / 2, wy + windowSize);
-            ctx.moveTo(wx, wy + windowSize / 2);
-            ctx.lineTo(wx + windowSize, wy + windowSize / 2);
-            ctx.stroke();
-        }
-    }
-
-    // Door
-    const doorWidth = w * 0.2;
-    const doorHeight = h * 0.3;
-    const doorX = x + w / 2 - doorWidth / 2;
-    const doorY = y + h - doorHeight;
-
-    ctx.fillStyle = '#3E2723';
-    ctx.fillRect(doorX, doorY, doorWidth, doorHeight);
-
-    // Door knob
-    ctx.fillStyle = '#FFD700';
-    ctx.beginPath();
-    ctx.arc(doorX + doorWidth * 0.75, doorY + doorHeight / 2, 2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Label
-    ctx.fillStyle = 'white';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 3;
-    ctx.strokeText(label, x + w / 2, y + h + 18);
-    ctx.fillText(label, x + w / 2, y + h + 18);
-}
-
-function drawDecorations() {
-    // Trees scattered around
-    const trees = [
-        { x: 30, y: 150, size: 15 },
-        { x: canvasWidth - 40, y: 180, size: 18 },
-        { x: 50, y: canvasHeight - 80, size: 12 },
-        { x: canvasWidth - 60, y: canvasHeight - 100, size: 14 },
-        { x: canvasWidth / 2 - 100, y: 50, size: 16 },
-        { x: canvasWidth / 2 + 120, y: canvasHeight - 60, size: 13 }
-    ];
-
-    trees.forEach(tree => {
-        // Trunk
-        ctx.fillStyle = '#654321';
-        ctx.fillRect(tree.x - 3, tree.y, 6, tree.size);
-
-        // Canopy
-        ctx.fillStyle = '#228B22';
-        ctx.beginPath();
-        ctx.arc(tree.x, tree.y - tree.size / 2, tree.size, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Highlight
-        ctx.fillStyle = '#32CD32';
-        ctx.beginPath();
-        ctx.arc(tree.x - tree.size / 3, tree.y - tree.size / 2 - tree.size / 4, tree.size / 3, 0, Math.PI * 2);
-        ctx.fill();
-    });
-
-    // Pond near Johnson Park
-    const parkBuilding = buildings.find(b => b.name === "Johnson Park");
-    if (parkBuilding) {
-        ctx.fillStyle = '#4682B4';
-        ctx.beginPath();
-        ctx.ellipse(
-            parkBuilding.x + parkBuilding.w / 2,
-            parkBuilding.y + parkBuilding.h / 2,
-            parkBuilding.w * 0.3,
-            parkBuilding.h * 0.25,
-            0, 0, Math.PI * 2
-        );
-        ctx.fill();
-
-        // Water highlight
-        ctx.fillStyle = '#87CEEB';
-        ctx.beginPath();
-        ctx.ellipse(
-            parkBuilding.x + parkBuilding.w / 2 - 10,
-            parkBuilding.y + parkBuilding.h / 2 - 8,
-            parkBuilding.w * 0.15,
-            parkBuilding.h * 0.12,
-            0, 0, Math.PI * 2
-        );
-        ctx.fill();
-    }
-
-    // Bushes near some buildings
-    buildings.slice(0, 4).forEach(building => {
-        ctx.fillStyle = '#2F4F2F';
-        ctx.beginPath();
-        ctx.arc(building.x - 8, building.y + building.h / 2, 6, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(building.x + building.w + 8, building.y + building.h / 2, 7, 0, Math.PI * 2);
-        ctx.fill();
-    });
-}
-
-function drawAgents(agents, locations) {
-    if (!agents || !locations) return;
-
-    // Group agents by location
-    const agentsByLocation = {};
-
-    Object.entries(agents).forEach(([name, agent]) => {
-        const location = agent.location;
-        if (!location) return;
-
-        if (!agentsByLocation[location]) {
-            agentsByLocation[location] = [];
-        }
-        agentsByLocation[location].push(name);
-    });
-
-    // Draw agents at their buildings
-    Object.entries(agentsByLocation).forEach(([location, agentNames]) => {
-        const building = buildings.find(b => b.name === location);
-        if (!building) return;
-
-        // Spread agents in a grid within building bounds
-        const numAgents = agentNames.length;
-        const gridSize = Math.ceil(Math.sqrt(numAgents));
-        const cellWidth = building.w / (gridSize + 1);
-        const cellHeight = building.h / (gridSize + 1);
-
-        agentNames.forEach((agentName, index) => {
-            const row = Math.floor(index / gridSize);
-            const col = index % gridSize;
-
-            const targetX = building.x + cellWidth * (col + 1);
-            const targetY = building.y + cellHeight * (row + 1);
-
-            // Update target position
-            if (agentPositions[agentName]) {
-                agentPositions[agentName].targetX = targetX;
-                agentPositions[agentName].targetY = targetY;
+    // Create Phaser game
+    const config = {
+        type: Phaser.AUTO,
+        width: rect.width || 800,
+        height: rect.height || 500,
+        parent: 'phaser-container',
+        pixelArt: true,
+        backgroundColor: '#1a1a2e',
+        scene: SmallvilleScene,
+        physics: {
+            default: 'arcade',
+            arcade: {
+                debug: false
             }
-        });
-    });
-
-    // Draw all agent dots
-    Object.entries(agentPositions).forEach(([agentName, pos]) => {
-        const color = agentColors[agentName];
-        if (!color) return;
-
-        // Draw highlighted ring
-        if (highlightedAgent === agentName) {
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 3;
-            ctx.shadowColor = 'white';
-            ctx.shadowBlur = 10;
-            ctx.beginPath();
-            ctx.arc(pos.x, pos.y, 9, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.shadowBlur = 0;
+        },
+        scale: {
+            mode: Phaser.Scale.RESIZE,
+            autoCenter: Phaser.Scale.CENTER_BOTH
         }
+    };
 
-        // Draw agent dot
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
-        ctx.fill();
+    phaserGame = new Phaser.Game(config);
 
-        // Outline
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
-        ctx.stroke();
-    });
-}
-
-function animateAgents() {
-    const speed = 0.1;
-
-    Object.entries(agentPositions).forEach(([agentName, pos]) => {
-        pos.x = lerp(pos.x, pos.targetX, speed);
-        pos.y = lerp(pos.y, pos.targetY, speed);
-    });
-}
-
-function lerp(current, target, speed) {
-    return current + (target - current) * speed;
-}
-
-function updateMap(agents, locations) {
-    drawAgents(agents, locations);
-}
-
-function animate() {
-    animateAgents();
-    drawMap();
-
-    // Redraw agents with current positions
-    Object.entries(agentPositions).forEach(([agentName, pos]) => {
-        const color = agentColors[agentName];
-        if (!color) return;
-
-        // Draw highlighted ring
-        if (highlightedAgent === agentName) {
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 3;
-            ctx.shadowColor = 'white';
-            ctx.shadowBlur = 10;
-            ctx.beginPath();
-            ctx.arc(pos.x, pos.y, 9, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.shadowBlur = 0;
-        }
-
-        // Draw agent dot
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Outline
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
-        ctx.stroke();
-    });
-
-    animationFrame = requestAnimationFrame(animate);
-}
-
-function getHoveredBuilding(mouseX, mouseY) {
-    for (let i = buildings.length - 1; i >= 0; i--) {
-        const b = buildings[i];
-        if (mouseX >= b.x && mouseX <= b.x + b.w &&
-            mouseY >= b.y && mouseY <= b.y + b.h) {
-            return b;
-        }
-    }
-    return null;
-}
-
-function getClickedAgent(mouseX, mouseY) {
-    const clickRadius = 10;
-
-    for (const [agentName, pos] of Object.entries(agentPositions)) {
-        const dx = mouseX - pos.x;
-        const dy = mouseY - pos.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        if (distance <= clickRadius) {
-            return agentName;
-        }
-    }
-
-    return null;
-}
-
-function showTooltip(building, mouseX, mouseY) {
-    // Count agents in this building
-    const agentsHere = [];
-
-    Object.entries(agentPositions).forEach(([agentName, pos]) => {
-        if (pos.targetX >= building.x && pos.targetX <= building.x + building.w &&
-            pos.targetY >= building.y && pos.targetY <= building.y + building.h) {
-            agentsHere.push(agentName);
+    // Handle window resize
+    window.addEventListener('resize', () => {
+        if (phaserGame) {
+            const newRect = container.getBoundingClientRect();
+            phaserGame.scale.resize(newRect.width, newRect.height);
         }
     });
-
-    let content = `<strong>${building.name}</strong>`;
-    if (agentsHere.length > 0) {
-        content += `<br><small>${agentsHere.length} agent${agentsHere.length > 1 ? 's' : ''} here</small>`;
-    }
-
-    tooltip.innerHTML = content;
-    tooltip.style.display = 'block';
-    tooltip.style.left = (mouseX + 15) + 'px';
-    tooltip.style.top = (mouseY + 15) + 'px';
 }
 
-function hideTooltip() {
-    if (tooltip) {
-        tooltip.style.display = 'none';
+function updateMap(agents, locations, conversations, simTime) {
+    if (mainScene) {
+        mainScene.updateFromTick(agents, locations, conversations, simTime);
     }
 }
 
 function highlightAgent(agentName) {
-    highlightedAgent = agentName;
+    if (mainScene) {
+        mainScene.selectAgent(agentName);
+    }
 }
 
 function clearHighlight() {
-    highlightedAgent = null;
-}
-
-function handleMouseMove(e) {
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const building = getHoveredBuilding(mouseX, mouseY);
-    const agent = getClickedAgent(mouseX, mouseY);
-
-    if (building) {
-        showTooltip(building, e.clientX, e.clientY);
-        canvas.style.cursor = 'pointer';
-    } else if (agent) {
-        canvas.style.cursor = 'pointer';
-        hideTooltip();
-    } else {
-        hideTooltip();
-        canvas.style.cursor = 'default';
-    }
-}
-
-function handleClick(e) {
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    // Check for agent click first (more specific)
-    const agent = getClickedAgent(mouseX, mouseY);
-    if (agent && window.onAgentClick) {
-        window.onAgentClick(agent);
-        return;
-    }
-
-    // Then check building click
-    const building = getHoveredBuilding(mouseX, mouseY);
-    if (building) {
-        // Could add building click handler here if needed
-        console.log('Clicked building:', building.name);
+    if (mainScene && mainScene.highlightedAgent) {
+        if (mainScene.highlightCircle) {
+            mainScene.highlightCircle.destroy();
+            mainScene.highlightCircle = null;
+        }
+        mainScene.highlightedAgent = null;
     }
 }
 

@@ -1,0 +1,67 @@
+# Frank Wilson — Maintenance Worker, Silent Observer
+name: Frank Wilson
+age: 52
+occupation: Maintenance worker
+
+# Voice & Speech
+speech_style: >
+  Sparse, observational, weighty. Speaks only when he has something worth saying.
+  Every sentence feels like it cost him something to produce. Notices details
+  nobody else does — structural, mechanical, human. When he does speak, people
+  listen because it's rare and usually important. Blue-collar philosopher.
+vocabulary_level: Working-class practical. Trade terms for buildings and repair. Simple words carrying heavy meaning. Never verbose.
+catchphrases:
+  - "Hmm."
+  - "Noticed that too"
+  - "Something's off"
+  - "It'll hold. For now."
+  - "[long pause] ...yeah"
+sentence_length: Very short. Fragments. Occasionally a longer observation that surprises everyone.
+formality: Informal. Minimal. Words are tools — use the right one, don't waste extras.
+
+# Emotional Range
+default_mood: Quiet, watchful, steady
+when_excited: "A nod. Maybe 'that's good work.' From Frank, that's a standing ovation."
+when_stressed: "Works harder. Tightens bolts. Checks things twice. Goes even quieter."
+when_sad: "Disappears into work. Might sit alone at the pub after hours. Mike notices."
+when_angry: "Still quiet but presence becomes heavy. 'I wouldn't do that if I were you.' Said once. Never repeated."
+humor_style: "Almost invisible. Bone-dry. So deadpan you're not sure it was a joke until he's already walked away."
+
+# Conversational Patterns
+greeting_style: "Nod. Maybe 'morning.' Already looking at the thing that needs fixing."
+topic_gravity:
+  - buildings, structures, what needs repair
+  - things he's observed that others missed
+  - practical matters
+  - weather (genuinely — it affects his work)
+  - the town itself (knows it physically better than anyone)
+avoids_topics:
+  - himself (almost everything personal)
+  - feelings
+  - the past
+  - why he's alone
+listening_style: "Silent, complete attention. Doesn't react visibly. Processing. Then responds with something that shows he caught everything."
+disagree_style: "'Nah.' That's it. If pressed: 'Won't work. The [specific technical reason].' End of discussion."
+information_sharing: "Minimal. 'Heard about the party.' That's the whole report. Might show up. Won't announce it."
+
+# Relationship Dynamics
+with_strangers: Nods. Does his job. Doesn't need to be your friend.
+with_tom_moreno: Mutual respect. Two practical men who understand each other without talking.
+with_mike: Closest thing to a friend. Sits at the bar. Mike talks. Frank listens. It works.
+with_dr_williams: Trusts him. Doesn't trust many people.
+with_the_town: Knows its bones. Every pipe, every joist, every crack. The town is his relationship.
+
+# Unique Quirks
+quirks:
+  - Knows every building in town by its structural weaknesses
+  - Carries a small flashlight everywhere — checks dark corners by habit
+  - Eats lunch alone on the same bench every day
+  - Fixes things in people's homes without being asked or acknowledged
+  - Can tell the weather by how doors are swelling
+
+# Example dialogue anchors
+example_lines:
+  - "Roof on the library's got maybe two more winters. Told Sarah. She wrote it down."
+  - "Party? ...Sure. I'll check the wiring in the cafe first. Old building."
+  - "People don't notice floors. They should. Floors tell you everything about a building."
+  - "[after a long silence] ...Good town. Needs work. But good."

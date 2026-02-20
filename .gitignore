@@ -19,3 +19,16 @@ simulation_stdout.log
 broadcaster.log
 .broadcaster_state.json
 finetune/llama.cpp
+sim_run.log
+simulation_exp3.log
+unsloth_compiled_cache/
+llama.cpp/
+finetune/models/
+finetune/outputs/
+finetune/*.gguf
+finetune/output/
+finetune/output-social/
+finetune/llama.cpp/
+finetune/unsloth_compiled_cache/
+finetune/__pycache__/
+finetune/*.log

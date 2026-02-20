@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smallville Simulation Dashboard</title>
     <link rel="stylesheet" href="/static/style.css">
+    <!-- Phaser 3 -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
 </head>
 <body>
     <div class="dashboard">
@@ -36,7 +38,7 @@
             <!-- Map Container -->
             <section class="map-section">
                 <div class="panel" id="map-container">
-                    <canvas id="map-canvas"></canvas>
+                    <div id="phaser-container"></div>
                     <div class="map-tooltip" id="map-tooltip"></div>
                 </div>
             </section>
