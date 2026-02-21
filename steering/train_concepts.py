@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 DIRECTIONS_DIR = Path(__file__).parent / "directions"
 DIRECTIONS_DIR.mkdir(exist_ok=True)
 
-MODEL_ID = "google/gemma-2-9b-it"
-MODEL_SHORT = "gemma_2_9b_it"
+MODEL_ID = "google/gemma-2-2b-it"
+MODEL_SHORT = "gemma_2_2b_it"
 
 # ── Concept Prompt Pairs ─────────────────────────────────────────────────────
 # Each concept has positive prompts (exhibiting the concept) and negative
