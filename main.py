@@ -165,6 +165,11 @@ class SmallvilleSimulation:
                 except Exception as e:
                     logger.warning(f"Failed to load state, regenerating plans: {e}")
             
+            # Pre-load steering engine if using Neural Controller backend
+            from committee import ensure_engine_loaded
+            progress.update_progress(task, "Loading steering engine...")
+            await ensure_engine_loaded()
+            
             # Generate daily plans only for agents that don't have one
             agents_needing_plans = [a for a in self.agents.values() if not a.daily_plan]
             
@@ -362,9 +367,19 @@ class SmallvilleSimulation:
                 agents_here = list(location.current_agents)
                 
                 if len(agents_here) >= 2:
-                    # Check all pairs of agents at this location
-                    for i, agent1 in enumerate(agents_here):
-                        for agent2 in agents_here[i+1:]:
+                    # Sample pairs to check — limit to MAX_CONV_CHECKS_PER_LOCATION
+                    # to avoid O(n²) LLM calls when many agents are co-located
+                    import random
+                    all_pairs = [
+                        (agents_here[i], agents_here[j])
+                        for i in range(len(agents_here))
+                        for j in range(i+1, len(agents_here))
+                    ]
+                    max_checks = getattr(cfg, 'MAX_CONV_CHECKS_PER_LOCATION', 3)
+                    if len(all_pairs) > max_checks:
+                        all_pairs = random.sample(all_pairs, max_checks)
+
+                    for agent1, agent2 in all_pairs:
                             pair_key = tuple(sorted([agent1, agent2]))
                             
                             if pair_key in agent_pairs_checked:

@@ -48,11 +48,14 @@ body {
 }
 
 .sim-time {
-    font-size: 14px;
-    color: #0f3460;
-    background: #1a1a2e;
-    padding: 5px 12px;
-    border: 1px solid #0f3460;
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+    background: linear-gradient(135deg, #1a1a2e, #2a2a4e);
+    padding: 8px 16px;
+    border: 1px solid #6a6aff;
+    border-radius: 6px;
+    text-shadow: 0 0 12px rgba(150, 180, 255, 0.6);
 }
 
 .speed-controls {
@@ -889,8 +892,9 @@ body {
     }
 
     .sim-time {
-        font-size: 11px;
-        padding: 3px 8px;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 4px 10px;
     }
 
     .header-left {

@@ -56,6 +56,7 @@ CONVERSATION_RELEVANCE_THRESHOLD = 0.5  # Minimum relevance to initiate
 AGENT_BATCH_SIZE = 6             # Concurrent agent processing
 LLM_SEMAPHORE_LIMIT = 2          # Max concurrent Ollama requests
 CONVERSATION_CHECK_INTERVAL = 3  # Only check for new conversations every N ticks
+MAX_CONV_CHECKS_PER_LOCATION = 3  # Max pairs to evaluate per location per check (avoids O(n²))
 
 # Rule-based importance keywords (avoids LLM call per observation)
 ROUTINE_IMPORTANCE_KEYWORDS = {

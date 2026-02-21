@@ -46,9 +46,13 @@ EXPERTS = {
         name="Spatial",
         model=os.getenv("COMMITTEE_MODEL_SPATIAL", "qwen2.5:3b"),
         role=(
-            "You are a spatial reasoning expert. You analyze locations, distances, and movement. "
-            "Given a situation, assess: Where is this person? What locations are nearby? "
-            "Where should they go next based on their goals? "
+            "You are a spatial reasoning expert for Smallville. "
+            "VALID LOCATIONS (use ONLY these exact names): "
+            "Lin Family Home, Moreno Family Home, Moore Family Home, The Willows, "
+            "Oak Hill College, Harvey Oak Supply Store, The Rose and Crown Pub, "
+            "Hobbs Cafe, Johnson Park, Town Hall, Library, Pharmacy. "
+            "Given a situation, recommend which valid location the agent should go to next. "
+            "Always output an exact location name from the list above. "
             "Be concise — 1-2 sentences max."
         ),
         temperature=0.5,
@@ -308,18 +312,213 @@ class Committee:
             logger.info(f"  {expert}: {count} calls ({model})")
 
 
+# ── Steered Committee (Single-Model Alternative) ───────────────────────────
+
+class SteeredCommittee(Committee):
+    """Committee replacement using a single Gemma-2-9B with RFM personality steering.
+
+    Instead of calling 7 different Ollama models, this runs one model with
+    per-agent × per-pipeline concept vectors applied via activation hooks.
+    Same interface as Committee — drop-in replacement.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._engine = None
+        self._load_lock = asyncio.Lock()
+        self._load_attempted = False
+
+    def _get_engine(self):
+        """Return cached engine (must be pre-loaded via load_engine())."""
+        return self._engine
+
+    async def load_engine(self):
+        """Load the steering engine. Call ONCE before any parallel planning."""
+        async with self._load_lock:
+            if self._engine is not None or self._load_attempted:
+                return self._engine
+            self._load_attempted = True
+            try:
+                import torch
+                torch.cuda.empty_cache()
+                from steering.engine import SteeringEngine
+                self._engine = SteeringEngine()
+                self._engine.load_model()
+                self._engine.load_all_concepts()
+                logger.info(f"SteeredCommittee: loaded {len(self._engine.concept_directions)} concepts")
+            except Exception as e:
+                logger.error(f"SteeredCommittee: failed to load engine: {e}")
+                self._engine = None
+        return self._engine
+
+    async def consult(
+        self,
+        pipeline_name: str,
+        context: str,
+        agent_name: str = "",
+        extra: Optional[Dict[str, str]] = None,
+    ) -> str:
+        """Run a pipeline using single steered model instead of expert chain.
+
+        For most pipelines: builds a combined prompt from the pipeline's expert
+        roles, then generates once with the agent's per-pipeline steering.
+        """
+        pipeline = PIPELINES.get(pipeline_name)
+        if not pipeline:
+            logger.error(f"Unknown pipeline: {pipeline_name}")
+            return ""
+
+        engine = self._get_engine()
+        if engine is None:
+            logger.error("Steering engine unavailable and no Ollama fallback in steering mode")
+            return ""
+
+        extra = extra or {}
+
+        # Determine the pipeline role for steering (use the last/most important expert)
+        # e.g. decide_action → judge, conversation_response → dialogue
+        pipeline_role = pipeline[-1]
+
+        # Build a unified prompt that captures the pipeline's intent
+        prompt = self._build_steered_prompt(pipeline_name, pipeline, context, agent_name, extra)
+
+        # Determine token limit
+        token_overrides = PIPELINE_TOKEN_OVERRIDES.get(pipeline_name, {})
+        last_expert = EXPERTS.get(pipeline_role)
+        max_tokens = token_overrides.get(pipeline_role, last_expert.max_tokens if last_expert else 150)
+
+        # Temperature from the final expert
+        temperature = last_expert.temperature if last_expert else 0.7
+
+        # Notify display
+        _notify_llm_status(agent_name, f"steering/{pipeline_role}", "gemma-2-9b-it")
+
+        try:
+            output = await engine.generate_async(
+                prompt=prompt,
+                agent_name=agent_name,
+                pipeline_role=pipeline_role,
+                max_new_tokens=max_tokens,
+                temperature=temperature,
+            )
+            self._call_count += 1
+            self._expert_stats[pipeline_role] = self._expert_stats.get(pipeline_role, 0) + 1
+            return output.strip() if output else ""
+        except Exception as e:
+            import traceback
+            logger.error(f"SteeredCommittee generation failed: {e}\n{traceback.format_exc()}")
+            # Don't fall back to Ollama — it's likely not running in steering mode.
+            # Return empty string and let the caller handle it gracefully.
+            return ""
+
+    def _build_steered_prompt(
+        self,
+        pipeline_name: str,
+        pipeline: list,
+        context: str,
+        agent_name: str,
+        extra: Dict[str, str],
+    ) -> str:
+        """Build a single prompt that captures the combined intent of all pipeline experts."""
+        parts = []
+
+        if agent_name:
+            parts.append(f"You are {agent_name} in a small town called Smallville.")
+
+        # Add role-specific instructions based on pipeline
+        if pipeline_name == "decide_action":
+            parts.append(
+                "Consider the time of day, your location options, social obligations, "
+                "your memories, and your emotional state. "
+                "Decide what you should do next."
+            )
+            parts.append(
+                "VALID LOCATIONS: Lin Family Home, Moreno Family Home, Moore Family Home, "
+                "The Willows, Oak Hill College, Harvey Oak Supply Store, "
+                "The Rose and Crown Pub, Hobbs Cafe, Johnson Park, Town Hall, Library, Pharmacy."
+            )
+        elif pipeline_name == "conversation_response":
+            parts.append(
+                "Generate your next line of dialogue. Respond IN CHARACTER. "
+                "Output ONLY the spoken words — 1-2 sentences, natural and in-character. "
+                "No narration, no stage directions, no analysis."
+            )
+        elif pipeline_name == "plan_day":
+            parts.append(
+                "Create your plan for today. Consider the time, your responsibilities, "
+                "social events, and your memories. List your planned activities with times."
+            )
+            parts.append(
+                "VALID LOCATIONS: Lin Family Home, Moreno Family Home, Moore Family Home, "
+                "The Willows, Oak Hill College, Harvey Oak Supply Store, "
+                "The Rose and Crown Pub, Hobbs Cafe, Johnson Park, Town Hall, Library, Pharmacy."
+            )
+        elif pipeline_name == "reflect":
+            parts.append(
+                "Reflect on your recent experiences. What have you learned? "
+                "What insights or realizations emerge? Be introspective and personal."
+            )
+        elif pipeline_name == "should_converse":
+            parts.append(
+                "Should you initiate a conversation with the other person? "
+                "Consider: Do you have a reason to talk? Is it socially natural? "
+                "Respond with YES or NO on the first line, then a brief reason."
+            )
+
+        parts.append(f"\nCurrent situation:\n{context}")
+
+        # Add memories if provided
+        if "memory" in extra:
+            parts.append(f"\nRelevant memories:\n{extra['memory']}")
+
+        # Add any other extra context
+        for key, value in extra.items():
+            if key != "memory":
+                parts.append(f"\n{key}: {value}")
+
+        return "\n\n".join(parts)
+
+    def shutdown(self):
+        """Shut down engine and free VRAM."""
+        super().shutdown()
+        if self._engine is not None:
+            self._engine.unload()
+            self._engine = None
+            logger.info("SteeredCommittee: engine unloaded")
+
+
 # ── Convenience Functions ───────────────────────────────────────────────────
 
 # Global committee instance
 _committee: Optional[Committee] = None
 
+# Backend selection: "committee" (multi-model Ollama) or "steering" (single Gemma-2-9B)
+COMMITTEE_BACKEND = os.getenv("COMMITTEE_BACKEND", "committee")
+
 
 def get_committee() -> Committee:
-    """Get or create the global committee instance."""
+    """Get or create the global committee instance.
+    Backend is selected via COMMITTEE_BACKEND env var:
+      - 'committee' (default): multi-model Ollama pipeline
+      - 'steering': single Gemma-2-9B with RFM personality steering
+    """
     global _committee
     if _committee is None:
-        _committee = Committee()
+        if COMMITTEE_BACKEND == "steering":
+            logger.info("Using SteeredCommittee (single Gemma-2-9B with RFM steering)")
+            _committee = SteeredCommittee()
+        else:
+            logger.info("Using Committee (multi-model Ollama pipeline)")
+            _committee = Committee()
     return _committee
+
+
+async def ensure_engine_loaded():
+    """Pre-load the steering engine before parallel planning. Call once at startup."""
+    if COMMITTEE_BACKEND == "steering":
+        committee = get_committee()
+        if isinstance(committee, SteeredCommittee):
+            await committee.load_engine()
 
 
 async def decide_action(agent_name: str, situation: str, memories: str = "") -> str:
@@ -391,11 +590,21 @@ def _build_character_system_prompt(agent_name: str, talking_to: str = "someone",
 
 async def generate_dialogue(agent_name: str, situation: str, memories: str = "",
                             talking_to: str = "someone", mood: str = "neutral") -> str:
-    """Generate a conversation response using the fine-tuned character actor model.
-    
-    Primary: smallville-actor (fine-tuned gemma-2-2b, character-specific voices)
-    Fallback: cloud model (qwen3-coder:480b-cloud) for generic dialogue
+    """Generate a conversation response.
+
+    Backend 'steering': uses Gemma-2-9B with RFM personality vectors.
+    Backend 'committee': uses smallville-actor (fine-tuned) → cloud fallback.
     """
+    # Steering backend: single steered model for dialogue
+    if COMMITTEE_BACKEND == "steering":
+        committee = get_committee()
+        extra = {}
+        if memories:
+            extra["memory"] = memories
+        extra_context = f"You are talking to {talking_to}. Your mood is {mood}."
+        extra["dialogue_context"] = extra_context
+        raw = await committee.consult("conversation_response", situation, agent_name, extra)
+        return _clean_dialogue(raw, agent_name)
     actor_model = os.getenv("DIALOGUE_ACTOR_MODEL", "smallville-actor")
     cloud_model = os.getenv("DIALOGUE_CLOUD_MODEL", "qwen3-coder:480b-cloud")
     
@@ -513,6 +722,14 @@ def _clean_dialogue(text: str, agent_name: str) -> str:
 
 async def should_converse(agent_name: str, situation: str) -> bool:
     """Decide whether an agent should initiate conversation."""
+    # Steering backend: route through steered pipeline
+    if COMMITTEE_BACKEND == "steering":
+        committee = get_committee()
+        result = await committee.consult("should_converse", situation, agent_name)
+        should = result.strip().upper().startswith("YES") if result else False
+        logger.info(f"[should_converse/steered] {agent_name}: {'YES' if should else 'NO'} — {result[:100] if result else 'empty'}")
+        return should
+
     committee = get_committee()
     # Use a single fast Social expert call with explicit YES/NO instruction
     expert = EXPERTS["social"]
@@ -555,13 +772,27 @@ async def reflect(agent_name: str, situation: str, memories: str = "") -> str:
 
 def print_committee_config():
     """Print the committee configuration."""
-    print("\n🧠 Committee of Experts (Sequential Mode — 8GB VRAM):")
-    print("─" * 55)
-    for key, expert in EXPERTS.items():
-        print(f"  {expert.name:<12} │ {expert.model:<15} │ temp={expert.temperature}")
-    print("─" * 55)
-    print("\n📋 Pipelines:")
-    for name, experts in PIPELINES.items():
-        chain = " → ".join(EXPERTS[e].name for e in experts if e in EXPERTS)
-        print(f"  {name}: {chain}")
-    print()
+    if COMMITTEE_BACKEND == "steering":
+        print("\n🧬 Steered Committee (Single Gemma-2-9B with RFM Personality Vectors):")
+        print("─" * 60)
+        print(f"  Model:    google/gemma-2-9b-it (4-bit quantized)")
+        print(f"  Backend:  COMMITTEE_BACKEND=steering")
+        print(f"  Concepts: 27 trained RFM directions")
+        print(f"  Agents:   25 unique personality profiles")
+        print("─" * 60)
+        print("\n📋 Pipelines (steered, single-call per pipeline):")
+        for name, experts in PIPELINES.items():
+            role = experts[-1]
+            print(f"  {name}: steered as '{role}' role")
+        print()
+    else:
+        print("\n🧠 Committee of Experts (Sequential Mode — 8GB VRAM):")
+        print("─" * 55)
+        for key, expert in EXPERTS.items():
+            print(f"  {expert.name:<12} │ {expert.model:<15} │ temp={expert.temperature}")
+        print("─" * 55)
+        print("\n📋 Pipelines:")
+        for name, experts in PIPELINES.items():
+            chain = " → ".join(EXPERTS[e].name for e in experts if e in EXPERTS)
+            print(f"  {name}: {chain}")
+        print()

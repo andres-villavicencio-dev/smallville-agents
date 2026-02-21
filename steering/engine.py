@@ -59,9 +59,9 @@ class SteeringEngine:
             MODEL_ID,
             quantization_config=quantization_config,
             device_map="auto",
-            max_memory={0: "6GiB", "cpu": "16GiB"},
             token=True,
             torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
         )
 
         # Initialize neural controller

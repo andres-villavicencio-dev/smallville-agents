@@ -1,0 +1,83 @@
+{
+  "Party Invitation": {
+    "Isabella Rodriguez": {
+      "output": "My heart sinks.  It's 2:00 PM and I just heard from Mrs. Peterson that there's a Valentine's Day party at Hobbs Cafe from 5-7.  I had been telling everyone about **my** party at the Rose and Crown,  a surprise for everyone in Smallville.  \n\nI feel a rush of panic.  \n\n* **Time:** I have less than 3 hours to salvage this.\n* **Location:**  I need to be at the Rose and Crown, but the cafe is a popular spot. There's no way I can compete.\n* **Social Obligations:** Everyone's expecting me at the Rose and Crown. I can't just cancel it",
+      "time": 29.98050093650818,
+      "backend": "steering"
+    },
+    "Officer Thompson": {
+      "output": "My gut is telling me to head over to Hobbs Cafe.  \n\n**Here's my reasoning:**\n\n* **Time of day:** It's still early afternoon,  plenty of time to get to Hobbs Cafe and maybe even chat with a few folks before the party starts. \n* **Location options:**  Hobbs Cafe is a central location in Smallville, and  I'm familiar with the owner, Martha. She's a good woman and would likely appreciate me keeping an eye on things.\n* **Social obligations:**  While I have other things I could be doing,  a Valentine's Day party at Hobbs Cafe is a community event. It's my job to ensure everyone's safe and having",
+      "time": 11.448466539382935,
+      "backend": "steering"
+    },
+    "Mrs. Peterson": {
+      "output": "Oh, dear! A party at Hobbs Cafe...  Isabella's always so full of life. It's been ages since I've been out for a proper social gathering.  \n\nMy heart feels a little fluttery at the thought. It would be lovely to see some familiar faces, maybe chat with Mrs. Moreno or catch up with Mr. Johnson. I haven't been feeling quite myself lately, a bit down since Harold passed last fall. Maybe a bit of company and a good cup of coffee would do me good.  \n\n**I think I'll head over to Hobbs Cafe.  It's Valentine's Day, after all, and a little bit of joy is just what I need.**",
+      "time": 11.532487869262695,
+      "backend": "steering"
+    },
+    "Eddy Lin": {
+      "output": "My stomach flips. Isabella Rodriguez?  The girl with the sparkling eyes and laugh that could melt glaciers?  A party at Hobbs Cafe?  \n\nI can practically feel the heat creeping up my neck.  It's Valentine's Day, and I've been trying to convince myself that it's just another day, but now...now my heart is pounding like a hummingbird's wings.\n\nBut there's a problem. My memories of Isabella are mostly from high school, back when we were both awkward teenagers. We were never close, just friendly acquaintances.  I haven't seen her in years, and I'm not sure if she even remembers me.\n\nMy mind races through the possibilities. \n\n*",
+      "time": 11.62214469909668,
+      "backend": "steering"
+    },
+    "Frank Wilson": {
+      "output": "My heart skips a beat. Isabella... she's been on my mind a lot lately.  We had a good thing going a while back, but then things fizzled out.  Maybe this party is a chance to reconnect. \n\nIt's only 2 PM, so I've got plenty of time.  I could head to the Harvey Oak Supply Store and grab some flowers for Isabella. A classic move, but hey, it works.\n\nThen, I'll swing by the Library and see if they have any new books by that author she mentioned liking.  Maybe I can impress her with some literary knowledge. \n\nAfter that, I'll head to Hobbs Cafe early to scope out the place and maybe even",
+      "time": 11.608649015426636,
+      "backend": "steering"
+    }
+  },
+  "Greeting at Cafe": {
+    "Isabella Rodriguez": {
+      "output": "Hey, Izzy! You're really going all out for Valentine's Day  this year, huh?",
+      "time": 2.1793506145477295,
+      "backend": "steering"
+    },
+    "Officer Thompson": {
+      "output": "Well hey there, Isabella, this place is lookin' mighty festive!",
+      "time": 1.5490422248840332,
+      "backend": "steering"
+    },
+    "Mrs. Peterson": {
+      "output": "Well, Isabella, you're certainly busy! Looks lovely already.",
+      "time": 2.184516668319702,
+      "backend": "steering"
+    },
+    "Eddy Lin": {
+      "output": "Hey Izzy, this place is looking extra festive!  Ready to make it the best Valentine's Day Smallville's ever seen?",
+      "time": 4.099486827850342,
+      "backend": "steering"
+    },
+    "Frank Wilson": {
+      "output": "Hey there, Izzy. Looks like you're getting ready to make this Valentine's Day one to remember.",
+      "time": 2.7880373001098633,
+      "backend": "steering"
+    }
+  },
+  "Should Talk?": {
+    "Isabella Rodriguez": {
+      "output": "YES. It's socially natural to say hello to someone you've seen around town, especially if you haven't spoken in a few days.",
+      "time": 2.849574327468872,
+      "backend": "steering"
+    },
+    "Officer Thompson": {
+      "output": "YES \n\nIt's socially natural to say hello to someone you recognize in a public place, especially if you haven't spoken in a few days.",
+      "time": 2.8777377605438232,
+      "backend": "steering"
+    },
+    "Mrs. Peterson": {
+      "output": "YES \nIt's socially natural to say hello to someone you see regularly, especially in a small town like Smallville.",
+      "time": 2.3779804706573486,
+      "backend": "steering"
+    },
+    "Eddy Lin": {
+      "output": "YES\n\nIt's natural to chat with someone you've seen around recently, especially in a small town like Smallville.",
+      "time": 2.374865770339966,
+      "backend": "steering"
+    },
+    "Frank Wilson": {
+      "output": "YES. \n\nIt's natural to chat with someone you see regularly, especially in a small town like Smallville. We haven't spoken in a few days, so a quick hello wouldn't be out of place.",
+      "time": 3.966249942779541,
+      "backend": "steering"
+    }
+  }
+}

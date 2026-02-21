@@ -16,6 +16,58 @@ from prompts import DAILY_PLANNING_PROMPT
 
 logger = logging.getLogger(__name__)
 
+# ── Location Validation ─────────────────────────────────────────────────────
+
+def snap_to_valid_location(raw: str, default: str = "Oak Hill College") -> str:
+    """Snap a freeform location string to the nearest valid SMALLVILLE_LOCATIONS key.
+
+    Tries exact match, case-insensitive match, substring match, then keyword hints.
+    Returns *default* only as a last resort.
+    """
+    from config import SMALLVILLE_LOCATIONS
+    valid = set(SMALLVILLE_LOCATIONS.keys())
+
+    # Exact match
+    if raw in valid:
+        return raw
+
+    # Case-insensitive exact
+    raw_lower = raw.lower().strip()
+    for v in valid:
+        if v.lower() == raw_lower:
+            return v
+
+    # Substring match (e.g. "Hobbs" → "Hobbs Cafe")
+    for v in valid:
+        if v.lower() in raw_lower or raw_lower in v.lower():
+            return v
+
+    # Keyword hints for common hallucinations
+    _HINTS = {
+        "clinic": "Pharmacy", "medical": "Pharmacy", "doctor": "Pharmacy",
+        "hospital": "Pharmacy", "health": "Pharmacy",
+        "restaurant": "The Rose and Crown Pub", "diner": "The Rose and Crown Pub",
+        "eat": "Hobbs Cafe", "food": "Hobbs Cafe",
+        "police": "Town Hall", "station": "Town Hall",
+        "apartment": "The Willows", "flat": "The Willows",
+        "college": "Oak Hill College", "campus": "Oak Hill College", "school": "Oak Hill College",
+        "store": "Harvey Oak Supply Store", "shop": "Harvey Oak Supply Store",
+        "garden": "Johnson Park", "outdoor": "Johnson Park",
+        "pub": "The Rose and Crown Pub", "bar": "The Rose and Crown Pub",
+        "cafe": "Hobbs Cafe", "coffee": "Hobbs Cafe",
+        "mayor": "Town Hall", "civic": "Town Hall", "council": "Town Hall",
+        "book": "Library", "study": "Library",
+        "home": default,  # caller should pass agent's home
+        "residence": default, "house": default, "my place": default,
+    }
+    for hint, loc in _HINTS.items():
+        if hint in raw_lower:
+            return loc
+
+    logger.debug(f"snap_to_valid_location: no match for '{raw}', using default '{default}'")
+    return default
+
+
 # Location inference mappings — keys must match SMALLVILLE_LOCATIONS in config.py
 LOCATION_KEYWORDS = {
     "home": ["wake up", "shower", "breakfast", "sleep", "bed", "morning routine", "get dressed", "evening", "dinner at home", "relax at home"],
@@ -138,8 +190,8 @@ class PlanParser:
                     return self.default_work
                 return location  # Already proper case in the dict
 
-        # Default to work
-        return self.default_work
+        # Fallback: snap freeform text to nearest valid location
+        return snap_to_valid_location(activity, default=self.default_work)
 
 
 def extract_time_from_text(text: str) -> Optional[Tuple[int, int]]:

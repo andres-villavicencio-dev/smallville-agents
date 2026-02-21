@@ -100,8 +100,16 @@ class SmallvilleEnvironment:
                    sub_area: Optional[str] = None) -> bool:
         """Move an agent to a new location."""
         if destination not in self.locations:
-            logger.warning(f"Unknown location: {destination}")
-            return False
+            from planning_utils import snap_to_valid_location
+            # Try to snap hallucinated location to a valid one
+            home = self.agent_locations.get(agent_name, "Oak Hill College")
+            snapped = snap_to_valid_location(destination, default=home)
+            if snapped in self.locations:
+                logger.info(f"Snapped location '{destination}' → '{snapped}' for {agent_name}")
+                destination = snapped
+            else:
+                logger.warning(f"Unknown location: {destination}")
+                return False
         
         # Remove from current location
         current_location = self.agent_locations.get(agent_name)
