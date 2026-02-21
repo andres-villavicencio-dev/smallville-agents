@@ -206,10 +206,43 @@ class GenerativeAgent:
 
             # Use planning engine (handles committee vs single-model)
             planning_engine = PlanningEngine.get_engine()
-            response = await planning_engine.plan_day(self, date)
             
-            # Parse the response into plan items
-            plan_items = await self._parse_daily_plan(response, date)
+            # Retry planning if LLM returns empty/garbage (e.g. Ollama down)
+            MAX_PLAN_RETRIES = 3
+            PLAN_RETRY_DELAY = 30  # seconds
+            MIN_PLAN_ITEMS = 3     # a valid full-day plan should have at least 3 items
+            
+            plan_items = []
+            for attempt in range(1, MAX_PLAN_RETRIES + 1):
+                response = await planning_engine.plan_day(self, date)
+                
+                if response and response.strip():
+                    plan_items = await self._parse_daily_plan(response, date)
+                    
+                    if len(plan_items) >= MIN_PLAN_ITEMS:
+                        break  # Good plan, proceed
+                    else:
+                        logger.warning(
+                            f"{self.name} plan attempt {attempt}/{MAX_PLAN_RETRIES}: "
+                            f"only {len(plan_items)} items (need {MIN_PLAN_ITEMS}+). "
+                            f"Raw response ({len(response)} chars): {response[:200]}"
+                        )
+                else:
+                    logger.warning(
+                        f"{self.name} plan attempt {attempt}/{MAX_PLAN_RETRIES}: "
+                        f"empty response from LLM"
+                    )
+                
+                if attempt < MAX_PLAN_RETRIES:
+                    logger.info(f"{self.name} retrying plan in {PLAN_RETRY_DELAY}s...")
+                    await asyncio.sleep(PLAN_RETRY_DELAY)
+            
+            if len(plan_items) < MIN_PLAN_ITEMS:
+                logger.error(
+                    f"{self.name} failed to generate valid plan after {MAX_PLAN_RETRIES} attempts "
+                    f"(got {len(plan_items)} items). Generating fallback plan."
+                )
+                plan_items = self._generate_fallback_plan(date)
             
             # Skip decomposition for speed — 120s ticks don't need 5-min granularity
             self.daily_plan = plan_items
@@ -234,8 +267,91 @@ class GenerativeAgent:
         
         except Exception as e:
             logger.error(f"Error planning daily schedule for {self.name}: {e}")
-            return []
+            # Even on exception, give the agent a fallback plan so the sim keeps moving
+            fallback = self._generate_fallback_plan(date)
+            self.daily_plan = fallback
+            return fallback
     
+    def _generate_fallback_plan(self, date: datetime) -> List[PlanItem]:
+        """Generate a basic persona-driven plan when LLM is unavailable.
+        
+        Uses the agent's persona data (home, work, lunch location) to create
+        a reasonable default schedule. Not creative, but keeps the sim moving
+        and ensures agents are in plausible locations throughout the day.
+        """
+        persona = get_agent_persona(self.name)
+        home = persona.get("home_location", "Lin Family Home")
+        work = persona.get("work_location", "Oak Hill College")
+        lunch = persona.get("lunch_location", "Hobbs Cafe")
+        errands = persona.get("errand_locations", ["Johnson Park", "Harvey Oak Supply Store"])
+        
+        # Check if agent has any event commitments in memory (e.g. party invites)
+        event_items = []
+        try:
+            from reflection_engine import CommitteePlanning
+            events_query = f"What events or social gatherings are happening? {self.name}"
+            event_memories = self.memory_stream.retrieve_memories(events_query, top_k=5)
+            commitments = CommitteePlanning._extract_event_commitments(
+                [m for m, _ in event_memories], self.name
+            )
+            # Parse commitments into plan items (format: "EVENT at TIME at LOCATION")
+            import re
+            for c in commitments:
+                time_match = re.search(r'(\d{1,2}):?(\d{2})?\s*(AM|PM|am|pm)', c)
+                if time_match:
+                    hour = int(time_match.group(1))
+                    minute = int(time_match.group(2) or 0)
+                    ampm = time_match.group(3).upper()
+                    if ampm == "PM" and hour != 12:
+                        hour += 12
+                    elif ampm == "AM" and hour == 12:
+                        hour = 0
+                    event_items.append(PlanItem(
+                        description=c,
+                        location=lunch,  # best guess for events
+                        start_time=date.replace(hour=hour, minute=minute, second=0, microsecond=0),
+                        duration_minutes=120,
+                    ))
+        except Exception as e:
+            logger.warning(f"Fallback plan: couldn't extract events for {self.name}: {e}")
+        
+        base_plan = [
+            PlanItem(description="Wake up and morning routine", location=home,
+                     start_time=date.replace(hour=7, minute=0, second=0, microsecond=0),
+                     duration_minutes=60),
+            PlanItem(description="Work", location=work,
+                     start_time=date.replace(hour=9, minute=0, second=0, microsecond=0),
+                     duration_minutes=180),
+            PlanItem(description="Lunch", location=lunch,
+                     start_time=date.replace(hour=12, minute=0, second=0, microsecond=0),
+                     duration_minutes=60),
+            PlanItem(description="Afternoon activities", location=work,
+                     start_time=date.replace(hour=13, minute=0, second=0, microsecond=0),
+                     duration_minutes=180),
+            PlanItem(description="Visit " + (errands[0] if errands else "Johnson Park"),
+                     location=errands[0] if errands else "Johnson Park",
+                     start_time=date.replace(hour=16, minute=0, second=0, microsecond=0),
+                     duration_minutes=60),
+            PlanItem(description="Dinner and evening relaxation", location=home,
+                     start_time=date.replace(hour=18, minute=0, second=0, microsecond=0),
+                     duration_minutes=180),
+        ]
+        
+        # Merge event commitments into the plan (replace overlapping slots)
+        if event_items:
+            for event in event_items:
+                # Remove base plan items that overlap with the event
+                base_plan = [
+                    p for p in base_plan
+                    if not (p.start_time < event.start_time + timedelta(minutes=event.duration_minutes)
+                            and event.start_time < p.start_time + timedelta(minutes=p.duration_minutes))
+                ]
+                base_plan.append(event)
+            base_plan.sort(key=lambda p: p.start_time)
+        
+        logger.info(f"{self.name} using fallback plan ({len(base_plan)} items, {len(event_items)} events)")
+        return base_plan
+
     async def _parse_daily_plan(self, plan_text: str, date: datetime) -> List[PlanItem]:
         """Parse LLM-generated daily plan text into PlanItem objects.
 
@@ -360,8 +476,10 @@ class GenerativeAgent:
         elif any(word in activity_lower for word in ['town hall', 'meeting', 'mayor']):
             return "Town Hall"
         
-        # Default to work location
-        return self.persona.get("work_location", self.current_location or "Town Center")
+        # Fallback: snap freeform text to nearest valid location
+        from planning_utils import snap_to_valid_location
+        default = self.persona.get("work_location", self.current_location or "Oak Hill College")
+        return snap_to_valid_location(activity, default=default)
     
     def _infer_duration_from_activity(self, activity: str) -> int:
         """Infer activity duration in minutes."""
@@ -497,12 +615,16 @@ class GenerativeAgent:
         
         try:
             if cfg.USE_COMMITTEE:
-                from committee import get_committee, EXPERTS
+                from committee import get_committee, COMMITTEE_BACKEND
                 committee = get_committee()
-                expert = EXPERTS["social"]
-                from llm import _notify_llm_status
-                _notify_llm_status(self.name, "react_to_conv", expert.model)
-                response = await committee._call_model(expert, prompt)
+                if COMMITTEE_BACKEND == "steering":
+                    response = await committee.consult("decide_action", prompt, self.name)
+                else:
+                    from committee import EXPERTS
+                    expert = EXPERTS["social"]
+                    from llm import _notify_llm_status
+                    _notify_llm_status(self.name, "react_to_conv", expert.model)
+                    response = await committee._call_model(expert, prompt)
             else:
                 llm = await get_llm_client()
                 response = await llm.generate(prompt, temperature=0.6, max_tokens=80, task="react")
