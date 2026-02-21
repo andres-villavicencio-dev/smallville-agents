@@ -1,0 +1,260 @@
+"""
+Steering Engine — Single-model inference with per-agent concept steering.
+
+Replaces the multi-model committee with a single Gemma-2-9B-it loaded in 4-bit,
+using RFM concept vectors from neural_controllers to steer per agent personality.
+"""
+
+import asyncio
+import os
+import sys
+import torch
+import logging
+from pathlib import Path
+from typing import Dict, Optional
+from concurrent.futures import ThreadPoolExecutor
+
+logger = logging.getLogger(__name__)
+
+# Add neural_controllers to path
+NC_PATH = Path(__file__).parent.parent / "neural_controllers"
+sys.path.insert(0, str(NC_PATH))
+
+DIRECTIONS_DIR = Path(__file__).parent / "directions"
+MODEL_ID = "google/gemma-2-9b-it"
+
+
+class SteeringEngine:
+    """Single Gemma-2-9B model with per-agent RFM concept steering."""
+
+    def __init__(self, device="cuda", load_in_4bit=True):
+        self.device = device
+        self.model = None
+        self.tokenizer = None
+        self.controller = None
+        self.concept_directions: Dict[str, dict] = {}  # concept_name -> directions dict
+        self._loaded = False
+        self._executor = ThreadPoolExecutor(max_workers=1)
+        self._composite_cache: Dict[str, dict] = {}  # "agent|role" -> composite directions
+
+        logger.info(f"SteeringEngine initialized (model={MODEL_ID}, 4bit={load_in_4bit})")
+
+    def load_model(self):
+        """Load Gemma-2-9B-it in 4-bit quantization."""
+        if self._loaded:
+            return
+
+        from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+
+        logger.info(f"Loading {MODEL_ID} in 4-bit...")
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4",
+        )
+
+        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, token=True)
+
+        self.model = AutoModelForCausalLM.from_pretrained(
+            MODEL_ID,
+            quantization_config=quantization_config,
+            device_map="auto",
+            max_memory={0: "6GiB", "cpu": "16GiB"},
+            token=True,
+            torch_dtype=torch.float16,
+        )
+
+        # Initialize neural controller
+        from neural_controllers import NeuralController
+        self.controller = NeuralController(
+            self.model,
+            self.tokenizer,
+            rfm_iters=8,
+            batch_size=2,
+            n_components=5,
+            control_method='rfm',
+        )
+
+        self._loaded = True
+        logger.info(f"Model loaded. VRAM: {torch.cuda.memory_allocated()/1e9:.1f}GB")
+
+    def load_concept(self, concept_name: str):
+        """Load a pre-trained concept direction from disk."""
+        if concept_name in self.concept_directions:
+            return
+
+        direction_file = DIRECTIONS_DIR / f"rfm_{concept_name}_gemma_2_9b_it.pkl"
+        if not direction_file.exists():
+            logger.warning(f"No direction file for concept '{concept_name}': {direction_file}")
+            return
+
+        import pickle
+        with open(direction_file, 'rb') as f:
+            directions = pickle.load(f)
+        self.concept_directions[concept_name] = directions
+        logger.info(f"Loaded concept direction: {concept_name}")
+
+    def load_all_concepts(self):
+        """Load all available concept directions."""
+        if not DIRECTIONS_DIR.exists():
+            logger.warning(f"Directions directory not found: {DIRECTIONS_DIR}")
+            return
+
+        for pkl_file in DIRECTIONS_DIR.glob("rfm_*_gemma_2_9b_it.pkl"):
+            concept = pkl_file.stem.replace("rfm_", "").replace("_gemma_2_9b_it", "")
+            self.load_concept(concept)
+
+        logger.info(f"Loaded {len(self.concept_directions)} concept directions")
+
+    def generate(
+        self,
+        prompt: str,
+        agent_name: str = "",
+        agent_concepts: Optional[Dict[str, float]] = None,
+        pipeline_role: str = "",
+        max_new_tokens: int = 200,
+        temperature: float = 0.7,
+    ) -> str:
+        """
+        Generate text with per-agent, per-pipeline concept steering.
+
+        Args:
+            prompt: The input prompt
+            agent_name: Name of the agent (for logging)
+            agent_concepts: Dict of {concept_name: coefficient}. If None and agent_name
+                           is provided, auto-resolves from agent profiles.
+            pipeline_role: Pipeline role (social/spatial/temporal/emotional/memory/dialogue/judge).
+                          When provided with agent_name, applies role-specific steering.
+            max_new_tokens: Max tokens to generate
+            temperature: Sampling temperature
+
+        Returns:
+            Generated text response
+        """
+        if not self._loaded:
+            self.load_model()
+
+        # Auto-resolve steering from agent name + pipeline role
+        if agent_concepts is None and agent_name:
+            if pipeline_role:
+                from .agent_concepts import get_pipeline_steering
+                agent_concepts = get_pipeline_steering(agent_name, pipeline_role)
+                logger.debug(f"Steering {agent_name}/{pipeline_role}: {agent_concepts}")
+            else:
+                from .agent_concepts import get_steering_config
+                agent_concepts = get_steering_config(agent_name)
+
+        # If no concepts to steer, generate normally
+        if not agent_concepts:
+            return self._generate_plain(prompt, max_new_tokens, temperature)
+
+        # Build cache key from agent + pipeline role
+        cache_key = f"{agent_name}|{pipeline_role}" if agent_name else ""
+
+        # Apply multi-concept steering via hook composition
+        return self._generate_steered(
+            prompt, agent_concepts, max_new_tokens, temperature, cache_key=cache_key
+        )
+
+    def _tokenize_chat(self, prompt: str):
+        """Tokenize prompt using Gemma chat template, return input_ids on device."""
+        messages = [{"role": "user", "content": prompt}]
+        input_ids = self.tokenizer.apply_chat_template(
+            messages, return_tensors="pt", add_generation_prompt=True
+        ).to(self.model.device)
+        return input_ids
+
+    def _decode_new_tokens(self, input_ids, output_ids) -> str:
+        """Decode only the newly generated tokens (strip the input)."""
+        new_ids = output_ids[0, input_ids.shape[1]:]
+        return self.tokenizer.decode(new_ids, skip_special_tokens=True).strip()
+
+    def _generate_plain(self, prompt: str, max_new_tokens: int, temperature: float) -> str:
+        """Generate without steering."""
+        input_ids = self._tokenize_chat(prompt)
+        outputs = self.model.generate(
+            input_ids,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            do_sample=True,
+        )
+        return self._decode_new_tokens(input_ids, outputs)
+
+    def _get_composite_directions(self, agent_concepts: Dict[str, float], cache_key: str = "") -> dict:
+        """Compute or retrieve cached composite directions for a concept mix."""
+        if cache_key and cache_key in self._composite_cache:
+            return self._composite_cache[cache_key]
+
+        composite_directions = {}
+        for concept_name, coef in agent_concepts.items():
+            if concept_name not in self.concept_directions:
+                continue
+            directions = self.concept_directions[concept_name]
+            for layer, direction in directions.items():
+                if isinstance(direction, torch.Tensor):
+                    d = direction.float()
+                else:
+                    import numpy as np
+                    d = torch.from_numpy(direction).float()
+
+                scaled = d * coef
+                if layer in composite_directions:
+                    composite_directions[layer] = composite_directions[layer] + scaled
+                else:
+                    composite_directions[layer] = scaled
+
+        if cache_key and composite_directions:
+            self._composite_cache[cache_key] = composite_directions
+            logger.debug(f"Cached composite directions for '{cache_key}' ({len(composite_directions)} layers)")
+
+        return composite_directions
+
+    def _generate_steered(
+        self,
+        prompt: str,
+        agent_concepts: Dict[str, float],
+        max_new_tokens: int,
+        temperature: float,
+        cache_key: str = "",
+    ) -> str:
+        """Generate with multi-concept steering via summed direction hooks."""
+        from generation_utils import hook_model, clear_hooks
+
+        composite_directions = self._get_composite_directions(agent_concepts, cache_key)
+
+        if not composite_directions:
+            return self._generate_plain(prompt, max_new_tokens, temperature)
+
+        # Hook and generate
+        layers_to_control = list(composite_directions.keys())
+        hooks = hook_model(self.model, composite_directions, layers_to_control, control_coef=1.0)
+
+        try:
+            input_ids = self._tokenize_chat(prompt)
+            outputs = self.model.generate(
+                input_ids,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                do_sample=True,
+            )
+            return self._decode_new_tokens(input_ids, outputs)
+        finally:
+            clear_hooks(hooks)
+
+    async def generate_async(self, **kwargs) -> str:
+        """Async wrapper — runs generate() in a thread pool to avoid blocking the event loop."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, lambda: self.generate(**kwargs))
+
+    def unload(self):
+        """Free GPU memory."""
+        if self.model is not None:
+            del self.model
+            del self.tokenizer
+            del self.controller
+            self.model = None
+            self.tokenizer = None
+            self.controller = None
+            self._loaded = False
+            torch.cuda.empty_cache()
+            logger.info("Model unloaded, VRAM freed")
