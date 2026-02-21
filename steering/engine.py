@@ -157,11 +157,18 @@ class SteeringEngine:
         )
 
     def _tokenize_chat(self, prompt: str):
-        """Tokenize prompt using Gemma chat template, return input_ids on device."""
+        """Tokenize prompt using Gemma chat template, return input_ids tensor on device."""
         messages = [{"role": "user", "content": prompt}]
-        input_ids = self.tokenizer.apply_chat_template(
+        result = self.tokenizer.apply_chat_template(
             messages, return_tensors="pt", add_generation_prompt=True
-        ).to(self.model.device)
+        )
+        # apply_chat_template may return a BatchEncoding or raw tensor depending on version
+        if hasattr(result, 'input_ids'):
+            input_ids = result.input_ids.to(self.model.device)
+        elif isinstance(result, torch.Tensor):
+            input_ids = result.to(self.model.device)
+        else:
+            input_ids = result["input_ids"].to(self.model.device) if isinstance(result, dict) else torch.tensor(result).unsqueeze(0).to(self.model.device)
         return input_ids
 
     def _decode_new_tokens(self, input_ids, output_ids) -> str:
