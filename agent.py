@@ -280,9 +280,10 @@ class GenerativeAgent:
         and ensures agents are in plausible locations throughout the day.
         """
         persona = get_agent_persona(self.name)
-        home = persona.get("home_location", "Lin Family Home")
-        work = persona.get("work_location", "Oak Hill College")
-        lunch = persona.get("lunch_location", "Hobbs Cafe")
+        from planning_utils import snap_to_valid_location
+        home = snap_to_valid_location(persona.get("home_location", "Lin Family Home"), default="Lin Family Home")
+        work = snap_to_valid_location(persona.get("work_location", "Oak Hill College"), default="Oak Hill College")
+        lunch = snap_to_valid_location(persona.get("lunch_location", "Hobbs Cafe"), default="Hobbs Cafe")
         errands = persona.get("errand_locations", ["Johnson Park", "Harvey Oak Supply Store"])
         
         # Check if agent has any event commitments in memory (e.g. party invites)
@@ -450,15 +451,18 @@ class GenerativeAgent:
     
     def _infer_location_from_activity(self, activity: str) -> str:
         """Infer location based on activity description."""
+        from planning_utils import snap_to_valid_location
         activity_lower = activity.lower()
+        home = self.persona.get("home_location", "Lin Family Home")
         
         # Home activities
         if any(word in activity_lower for word in ['wake up', 'shower', 'breakfast', 'sleep', 'bed']):
-            return self.persona.get("home_location", "Lin Family Home")
+            return snap_to_valid_location(home, default="Lin Family Home")
         
         # Work activities
         if any(word in activity_lower for word in ['work', 'open', 'customers', 'teach', 'class']):
-            return self.persona.get("work_location", "Oak Hill College")
+            work = self.persona.get("work_location", "Oak Hill College")
+            return snap_to_valid_location(work, default="Oak Hill College")
         
         # Specific locations
         if any(word in activity_lower for word in ['pharmacy', 'medicine']):
@@ -477,8 +481,10 @@ class GenerativeAgent:
             return "Town Hall"
         
         # Fallback: snap freeform text to nearest valid location
-        from planning_utils import snap_to_valid_location
-        default = self.persona.get("work_location", self.current_location or "Oak Hill College")
+        default = snap_to_valid_location(
+            self.persona.get("work_location", "Oak Hill College"),
+            default=self.current_location or "Oak Hill College"
+        )
         return snap_to_valid_location(activity, default=default)
     
     def _infer_duration_from_activity(self, activity: str) -> int:
@@ -748,14 +754,31 @@ class GenerativeAgent:
             self.current_location = ""
         self.current_sub_area = state.get("current_sub_area", "")
         
-        # Load daily plan
+        # Load daily plan and snap all plan item locations
         plan_data = state.get("daily_plan", [])
         self.daily_plan = [PlanItem.from_dict(item) for item in plan_data]
+        home = self.persona.get("home_location", "Oak Hill College")
+        for item in self.daily_plan:
+            if item.location:
+                snapped = snap_to_valid_location(item.location, default=home)
+                if snapped != item.location:
+                    logger.debug(f"{self.name} plan item snapped '{item.location}' → '{snapped}'")
+                    item.location = snapped
+        
+        # Filter out junk plan items (LLM meta-commentary like "Let me know if...")
+        self.daily_plan = [item for item in self.daily_plan if not any(
+            junk in item.description.lower() for junk in 
+            ["let me know", "would you like", "feel free", "i hope this", "here's"]
+        )]
         
         # Load current plan item
         current_item_data = state.get("current_plan_item")
         if current_item_data:
             self.current_plan_item = PlanItem.from_dict(current_item_data)
+            if self.current_plan_item.location:
+                snapped = snap_to_valid_location(self.current_plan_item.location, default=home)
+                if snapped != self.current_plan_item.location:
+                    self.current_plan_item.location = snapped
         
         # Load reflection data
         if "last_reflection_time" in state:

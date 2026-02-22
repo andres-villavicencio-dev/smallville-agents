@@ -314,7 +314,12 @@ class SmallvilleSimulation:
                     if planned_location != current_location:
                         success = self.environment.move_agent(agent.name, planned_location)
                         if success:
-                            agent.move_to_location(planned_location)
+                            # Use the environment's snapped location (not the raw plan value)
+                            snapped = self.environment.agent_locations.get(agent.name, planned_location)
+                            agent.move_to_location(snapped)
+                            # Also fix the plan item so future ticks don't re-trigger
+                            if snapped != planned_location:
+                                agent.current_plan_item.location = snapped
                             self.display.add_event(
                                 f"🚶 {agent.name} → {planned_location}"
                             )
