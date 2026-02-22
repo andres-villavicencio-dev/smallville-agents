@@ -48,6 +48,26 @@ function connect() {
         try {
             const data = JSON.parse(event.data);
             if (data.type === 'tick') {
+                // If Phaser scene isn't ready yet, queue the tick and retry
+                if (!window.updateMap || !mainScene) {
+                    console.log('Phaser not ready, queuing tick...');
+                    if (!window._pendingTick) {
+                        window._pendingTick = data;
+                        const waitForScene = setInterval(() => {
+                            if (mainScene) {
+                                clearInterval(waitForScene);
+                                console.log('Phaser ready, replaying queued tick');
+                                handleTick(window._pendingTick);
+                                window._pendingTick = null;
+                            }
+                        }, 100);
+                    } else {
+                        window._pendingTick = data; // Update with latest
+                    }
+                    // Still update DOM elements that don't need Phaser
+                    updateHeader(data);
+                    return;
+                }
                 handleTick(data);
             }
         } catch (err) {

@@ -46,6 +46,18 @@ class SmallvilleWebUI:
         self.site = web.TCPSite(self.runner, "0.0.0.0", port)
         await self.site.start()
         logger.info(f"Web UI server started on http://0.0.0.0:{port}")
+        
+        # Start periodic broadcast so clients get updates even when tick loop is busy
+        self._periodic_broadcast_task = asyncio.create_task(self._periodic_broadcast())
+    
+    async def _periodic_broadcast(self):
+        """Broadcast state every 5 seconds regardless of tick loop progress."""
+        while True:
+            await asyncio.sleep(5)
+            try:
+                await self.broadcast_tick()
+            except Exception:
+                pass
 
     async def stop(self):
         """Gracefully close all WebSocket connections and shut down."""
