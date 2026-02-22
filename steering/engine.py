@@ -21,7 +21,7 @@ NC_PATH = Path(__file__).parent.parent / "neural_controllers"
 sys.path.insert(0, str(NC_PATH))
 
 DIRECTIONS_DIR = Path(__file__).parent / "directions"
-MODEL_ID = "google/gemma-3-1b-it"
+MODEL_ID = "Qwen/Qwen3-4B"
 
 
 class SteeringEngine:
@@ -83,7 +83,7 @@ class SteeringEngine:
         if concept_name in self.concept_directions:
             return
 
-        direction_file = DIRECTIONS_DIR / f"rfm_{concept_name}_gemma_3_1b_it.pkl"
+        direction_file = DIRECTIONS_DIR / f"rfm_{concept_name}_qwen3_4b.pkl"
         if not direction_file.exists():
             logger.warning(f"No direction file for concept '{concept_name}': {direction_file}")
             return
@@ -100,8 +100,8 @@ class SteeringEngine:
             logger.warning(f"Directions directory not found: {DIRECTIONS_DIR}")
             return
 
-        for pkl_file in DIRECTIONS_DIR.glob("rfm_*_gemma_3_1b_it.pkl"):
-            concept = pkl_file.stem.replace("rfm_", "").replace("_gemma_3_1b_it", "")
+        for pkl_file in DIRECTIONS_DIR.glob("rfm_*_qwen3_4b.pkl"):
+            concept = pkl_file.stem.replace("rfm_", "").replace("_qwen3_4b", "")
             self.load_concept(concept)
 
         logger.info(f"Loaded {len(self.concept_directions)} concept directions")
