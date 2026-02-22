@@ -110,6 +110,14 @@ class SmallvilleWebUI:
         self.ws_clients.add(ws)
         logger.info(f"WebSocket client connected ({len(self.ws_clients)} total)")
 
+        # Send initial state immediately so agents aren't stuck at center
+        try:
+            payload = self._build_tick_state()
+            await ws.send_str(json.dumps(payload))
+            logger.info("Sent initial state to new WebSocket client")
+        except Exception as exc:
+            logger.warning(f"Failed to send initial state: {exc}")
+
         try:
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
