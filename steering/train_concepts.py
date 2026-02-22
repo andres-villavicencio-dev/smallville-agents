@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 DIRECTIONS_DIR = Path(__file__).parent / "directions"
 DIRECTIONS_DIR.mkdir(exist_ok=True)
 
-MODEL_ID = "google/gemma-2-2b-it"
-MODEL_SHORT = "gemma_2_2b_it"
+MODEL_ID = "google/gemma-3-1b-it"
+MODEL_SHORT = "gemma_3_1b_it"
 
 # ── Concept Prompt Pairs ─────────────────────────────────────────────────────
 # Each concept has positive prompts (exhibiting the concept) and negative
@@ -1371,11 +1371,15 @@ def train_all_concepts():
         MODEL_ID,
         quantization_config=quantization_config,
         device_map="auto",
+        max_memory={0: "5GiB", "cpu": "16GiB"},
         token=True,
     )
 
+    import gc
     for concept_name in CONCEPT_DATA:
         train_concept(concept_name, model=model, tokenizer=tokenizer)
+        gc.collect()
+        torch.cuda.empty_cache()
 
     logger.info(f"All {len(CONCEPT_DATA)} concepts trained!")
 
