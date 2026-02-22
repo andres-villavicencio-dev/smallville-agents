@@ -173,14 +173,19 @@ class SteeringEngine:
 
     def _decode_new_tokens(self, input_ids, output_ids) -> str:
         """Decode only the newly generated tokens (strip the input)."""
+        import re
         new_ids = output_ids[0, input_ids.shape[1]:]
-        return self.tokenizer.decode(new_ids, skip_special_tokens=True).strip()
+        text = self.tokenizer.decode(new_ids, skip_special_tokens=True).strip()
+        # Strip Qwen3 thinking blocks — keep only the final answer
+        text = re.sub(r'<think>.*?</think>\s*', '', text, flags=re.DOTALL)
+        return text.strip()
 
     def _generate_plain(self, prompt: str, max_new_tokens: int, temperature: float) -> str:
         """Generate without steering."""
         input_ids = self._tokenize_chat(prompt)
         outputs = self.model.generate(
             input_ids,
+            attention_mask=torch.ones_like(input_ids),
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             do_sample=True,
@@ -240,6 +245,7 @@ class SteeringEngine:
             input_ids = self._tokenize_chat(prompt)
             outputs = self.model.generate(
                 input_ids,
+                attention_mask=torch.ones_like(input_ids),
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
                 do_sample=True,
