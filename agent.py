@@ -133,6 +133,10 @@ class GenerativeAgent:
         if (datetime.now() - self.last_reflection_time).total_seconds() < 600:
             return
         
+        # Suppress reflection storm on startup: skip if sim has been running < 2 minutes
+        if hasattr(self, '_sim_start_time') and (datetime.now() - self._sim_start_time).total_seconds() < 120:
+            return
+        
         # Only count importance of memories created SINCE last reflection
         # This effectively "resets" the accumulator after each reflection
         recent_importance_sum = self.memory_stream.get_importance_since(

@@ -134,6 +134,7 @@ class SmallvilleSimulation:
             
             for name in agent_names:
                 agent = GenerativeAgent(name)
+                agent._sim_start_time = datetime.now()
                 self.agents[name] = agent
                 
                 # Place agents at their home locations initially
