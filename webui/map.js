@@ -1025,66 +1025,68 @@ class SmallvilleScene extends Phaser.Scene {
     // AGENT MOVEMENT
     // ========================================================================
 
-    moveAgentTo(agentName, location) {
+    resolveBuilding(location) {
+        let building = BUILDINGS[location];
+        if (building) return building;
+
+        // Try fuzzy matching for hallucinated/non-standard location names
+        const locationLower = location.toLowerCase();
+        const LOCATION_HINTS = {
+            'restaurant': 'The Rose and Crown Pub',
+            'diner': 'The Rose and Crown Pub',
+            'clinic': 'Pharmacy',
+            'medical': 'Pharmacy',
+            'doctor': 'Pharmacy',
+            'hospital': 'Pharmacy',
+            'police': 'Town Hall',
+            'station': 'Town Hall',
+            'campus': 'Oak Hill College',
+            'school': 'Oak Hill College',
+            'college': 'Oak Hill College',
+            'store': 'Harvey Oak Supply Store',
+            'shop': 'Harvey Oak Supply Store',
+            'supply': 'Harvey Oak Supply Store',
+            'garden': 'Johnson Park',
+            'park': 'Johnson Park',
+            'pub': 'The Rose and Crown Pub',
+            'bar': 'The Rose and Crown Pub',
+            'cafe': 'Hobbs Cafe',
+            'coffee': 'Hobbs Cafe',
+            'library': 'Library',
+            'book': 'Library',
+            'town hall': 'Town Hall',
+            'mayor': 'Town Hall',
+            'pharmacy': 'Pharmacy',
+            'willows': 'The Willows',
+            'apartment': 'The Willows',
+        };
+        for (const [hint, target] of Object.entries(LOCATION_HINTS)) {
+            if (locationLower.includes(hint)) {
+                building = BUILDINGS[target];
+                if (building) return building;
+            }
+        }
+        // Last resort: substring match
+        for (const [bName, bData] of Object.entries(BUILDINGS)) {
+            if (bName.toLowerCase().includes(locationLower) || locationLower.includes(bName.toLowerCase())) {
+                return bData;
+            }
+        }
+        return null;
+    }
+
+    moveAgentTo(agentName, location, offset = { dx: 0, dy: 0 }) {
         const sprite = this.agentSprites[agentName];
         if (!sprite) return;
 
-        let building = BUILDINGS[location];
+        const building = this.resolveBuilding(location);
         if (!building) {
-            // Try fuzzy matching for hallucinated/non-standard location names
-            const locationLower = location.toLowerCase();
-            const LOCATION_HINTS = {
-                'restaurant': 'The Rose and Crown Pub',
-                'diner': 'The Rose and Crown Pub',
-                'clinic': 'Pharmacy',
-                'medical': 'Pharmacy',
-                'doctor': 'Pharmacy',
-                'hospital': 'Pharmacy',
-                'police': 'Town Hall',
-                'station': 'Town Hall',
-                'campus': 'Oak Hill College',
-                'school': 'Oak Hill College',
-                'college': 'Oak Hill College',
-                'store': 'Harvey Oak Supply Store',
-                'shop': 'Harvey Oak Supply Store',
-                'supply': 'Harvey Oak Supply Store',
-                'garden': 'Johnson Park',
-                'park': 'Johnson Park',
-                'pub': 'The Rose and Crown Pub',
-                'bar': 'The Rose and Crown Pub',
-                'cafe': 'Hobbs Cafe',
-                'coffee': 'Hobbs Cafe',
-                'library': 'Library',
-                'book': 'Library',
-                'town hall': 'Town Hall',
-                'mayor': 'Town Hall',
-                'pharmacy': 'Pharmacy',
-                'willows': 'The Willows',
-                'apartment': 'The Willows',
-            };
-            for (const [hint, target] of Object.entries(LOCATION_HINTS)) {
-                if (locationLower.includes(hint)) {
-                    building = BUILDINGS[target];
-                    break;
-                }
-            }
-            // Last resort: try substring match against building names
-            if (!building) {
-                for (const [bName, bData] of Object.entries(BUILDINGS)) {
-                    if (bName.toLowerCase().includes(locationLower) || locationLower.includes(bName.toLowerCase())) {
-                        building = bData;
-                        break;
-                    }
-                }
-            }
-            if (!building) {
-                console.warn(`[map] No building found for location: "${location}" (agent: ${agentName})`);
-                return;
-            }
+            console.warn(`[map] No building found for location: "${location}" (agent: ${agentName})`);
+            return;
         }
 
-        const targetX = building.entrance.x * TILE_SIZE + TILE_SIZE / 2;
-        const targetY = building.entrance.y * TILE_SIZE + TILE_SIZE / 2;
+        const targetX = building.entrance.x * TILE_SIZE + TILE_SIZE / 2 + offset.dx;
+        const targetY = building.entrance.y * TILE_SIZE + TILE_SIZE / 2 + offset.dy;
 
         // Find path to location
         const path = this.findPath(sprite.x, sprite.y, targetX, targetY);
@@ -1096,6 +1098,23 @@ class SmallvilleScene extends Phaser.Scene {
         if (sprite.isMoving) {
             this.updateAgentAnimation(sprite);
         }
+    }
+
+    /**
+     * Gently nudge an agent to a new position within the same location cluster.
+     * Smooth direct movement (no pathfinding needed — they're already at the building).
+     */
+    nudgeAgentTo(sprite, location, offset) {
+        const building = this.resolveBuilding(location);
+        if (!building) return;
+
+        const targetX = building.entrance.x * TILE_SIZE + TILE_SIZE / 2 + offset.dx;
+        const targetY = building.entrance.y * TILE_SIZE + TILE_SIZE / 2 + offset.dy;
+
+        // Short direct path — just slide over
+        sprite.path = [{ x: targetX, y: targetY }];
+        sprite.pathIndex = 0;
+        sprite.isMoving = true;
     }
 
     updateAgentMovements(delta) {
@@ -1191,6 +1210,79 @@ class SmallvilleScene extends Phaser.Scene {
     }
 
     // ========================================================================
+    // AGENT CLUSTERING (fan-out around entrance)
+    // ========================================================================
+
+    /**
+     * Calculate offset position for an agent within a group at the same location.
+     * Arranges agents in a semicircle arc below the entrance point.
+     * @param {number} index - Agent's index within the location group (0-based)
+     * @param {number} total - Total agents at this location
+     * @returns {{dx: number, dy: number}} Pixel offset from entrance
+     */
+    getClusterOffset(index, total) {
+        if (total <= 1) return { dx: 0, dy: 0 };
+
+        // Ring configuration: inner ring holds up to 6, overflow goes to outer ring
+        const INNER_RADIUS = 14;
+        const OUTER_RADIUS = 26;
+        const INNER_MAX = 6;
+
+        let ring, ringIndex, ringTotal, radius;
+
+        if (total <= INNER_MAX) {
+            // All fit in inner ring
+            ring = 0;
+            ringIndex = index;
+            ringTotal = total;
+            radius = INNER_RADIUS;
+        } else if (index < INNER_MAX) {
+            // Inner ring
+            ring = 0;
+            ringIndex = index;
+            ringTotal = INNER_MAX;
+            radius = INNER_RADIUS;
+        } else {
+            // Outer ring
+            ring = 1;
+            ringIndex = index - INNER_MAX;
+            ringTotal = total - INNER_MAX;
+            radius = OUTER_RADIUS;
+        }
+
+        // Spread across a 180° arc below the entrance (π/6 to 5π/6 to avoid stacking directly below)
+        const arcStart = Math.PI / 6;
+        const arcEnd = 5 * Math.PI / 6;
+        const angle = ringTotal === 1
+            ? Math.PI / 2  // Single agent goes straight down
+            : arcStart + (arcEnd - arcStart) * (ringIndex / (ringTotal - 1));
+
+        const dx = Math.cos(angle) * radius;
+        const dy = Math.sin(angle) * radius * 0.7 + 8; // Flatten vertically, push down below entrance
+
+        return { dx: Math.round(dx), dy: Math.round(dy) };
+    }
+
+    /**
+     * Update building labels with agent count badges
+     */
+    updateBuildingCounts(locationGroups) {
+        for (const [name, building] of Object.entries(BUILDINGS)) {
+            const label = this.buildingLabels[name];
+            if (!label) continue;
+
+            const count = locationGroups[name] ? locationGroups[name].length : 0;
+            if (count > 0) {
+                label.setText(`${building.label} [${count}]`);
+                label.setStyle({ color: count >= 5 ? '#ffdd44' : '#ffffff' });
+            } else {
+                label.setText(building.label);
+                label.setStyle({ color: '#aaaaaa' });
+            }
+        }
+    }
+
+    // ========================================================================
     // EXTERNAL API (called by app.js)
     // ========================================================================
 
@@ -1214,6 +1306,23 @@ class SmallvilleScene extends Phaser.Scene {
         // Update agent positions and activities
         if (!agents) return;
 
+        // Group agents by location for clustering
+        const locationGroups = {};
+        for (const [agentName, agentData] of Object.entries(agents)) {
+            const loc = agentData.location;
+            if (loc) {
+                if (!locationGroups[loc]) locationGroups[loc] = [];
+                locationGroups[loc].push(agentName);
+            }
+        }
+        // Sort each group alphabetically for deterministic positioning
+        for (const loc of Object.keys(locationGroups)) {
+            locationGroups[loc].sort();
+        }
+
+        // Update building count badges
+        this.updateBuildingCounts(locationGroups);
+
         for (const [agentName, agentData] of Object.entries(agents)) {
             const sprite = this.agentSprites[agentName];
             if (!sprite) continue;
@@ -1227,7 +1336,21 @@ class SmallvilleScene extends Phaser.Scene {
 
             if (newLocation && newLocation !== currentLocation) {
                 sprite.currentLocation = newLocation;
-                this.moveAgentTo(agentName, newLocation);
+
+                // Calculate cluster offset
+                const group = locationGroups[newLocation] || [agentName];
+                const index = group.indexOf(agentName);
+                const offset = this.getClusterOffset(index >= 0 ? index : 0, group.length);
+
+                this.moveAgentTo(agentName, newLocation, offset);
+            } else if (newLocation && sprite.currentClusterTotal !== (locationGroups[newLocation] || []).length) {
+                // Same location but group size changed — reposition within cluster
+                const group = locationGroups[newLocation] || [agentName];
+                const index = group.indexOf(agentName);
+                const offset = this.getClusterOffset(index >= 0 ? index : 0, group.length);
+                sprite.currentClusterTotal = group.length;
+
+                this.nudgeAgentTo(sprite, newLocation, offset);
             }
         }
     }
