@@ -637,6 +637,11 @@ class SmallvilleSimulation:
                 if name in self.agents:
                     self.agents[name].load_state(agent_state)
             
+            # Re-sync environment with snapped agent locations
+            for name, agent in self.agents.items():
+                if agent.current_location:
+                    self.environment.move_agent(name, agent.current_location)
+            
             logger.info(f"Loaded state from {state_file}")
             
         except Exception as e:

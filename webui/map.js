@@ -1029,8 +1029,59 @@ class SmallvilleScene extends Phaser.Scene {
         const sprite = this.agentSprites[agentName];
         if (!sprite) return;
 
-        const building = BUILDINGS[location];
-        if (!building) return;
+        let building = BUILDINGS[location];
+        if (!building) {
+            // Try fuzzy matching for hallucinated/non-standard location names
+            const locationLower = location.toLowerCase();
+            const LOCATION_HINTS = {
+                'restaurant': 'The Rose and Crown Pub',
+                'diner': 'The Rose and Crown Pub',
+                'clinic': 'Pharmacy',
+                'medical': 'Pharmacy',
+                'doctor': 'Pharmacy',
+                'hospital': 'Pharmacy',
+                'police': 'Town Hall',
+                'station': 'Town Hall',
+                'campus': 'Oak Hill College',
+                'school': 'Oak Hill College',
+                'college': 'Oak Hill College',
+                'store': 'Harvey Oak Supply Store',
+                'shop': 'Harvey Oak Supply Store',
+                'supply': 'Harvey Oak Supply Store',
+                'garden': 'Johnson Park',
+                'park': 'Johnson Park',
+                'pub': 'The Rose and Crown Pub',
+                'bar': 'The Rose and Crown Pub',
+                'cafe': 'Hobbs Cafe',
+                'coffee': 'Hobbs Cafe',
+                'library': 'Library',
+                'book': 'Library',
+                'town hall': 'Town Hall',
+                'mayor': 'Town Hall',
+                'pharmacy': 'Pharmacy',
+                'willows': 'The Willows',
+                'apartment': 'The Willows',
+            };
+            for (const [hint, target] of Object.entries(LOCATION_HINTS)) {
+                if (locationLower.includes(hint)) {
+                    building = BUILDINGS[target];
+                    break;
+                }
+            }
+            // Last resort: try substring match against building names
+            if (!building) {
+                for (const [bName, bData] of Object.entries(BUILDINGS)) {
+                    if (bName.toLowerCase().includes(locationLower) || locationLower.includes(bName.toLowerCase())) {
+                        building = bData;
+                        break;
+                    }
+                }
+            }
+            if (!building) {
+                console.warn(`[map] No building found for location: "${location}" (agent: ${agentName})`);
+                return;
+            }
+        }
 
         const targetX = building.entrance.x * TILE_SIZE + TILE_SIZE / 2;
         const targetY = building.entrance.y * TILE_SIZE + TILE_SIZE / 2;

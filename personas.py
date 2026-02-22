@@ -318,7 +318,7 @@ AGENT_PERSONAS = {
         "daily_routine": ["see patients", "make house calls", "teach students", "research"],
         "goals": ["provide excellent healthcare", "train next generation", "serve community"],
         "home_location": "Williams Residence",
-        "work_location": "Medical clinic"
+        "work_location": "Pharmacy"
     },
     
     "Professor Anderson": {
@@ -408,7 +408,7 @@ AGENT_PERSONAS = {
         "daily_routine": ["prep food", "cook meals", "menu planning", "help Isabella"],
         "goals": ["perfect culinary skills", "support sister", "open own restaurant"],
         "home_location": "Rodriguez Home",
-        "work_location": "Local restaurant"
+        "work_location": "The Rose and Crown Pub"
     },
     
     "Mrs. Peterson": {
@@ -426,7 +426,7 @@ AGENT_PERSONAS = {
         "daily_routine": ["volunteer work", "visit library", "community events", "gardening"],
         "goals": ["help community", "stay connected", "share wisdom"],
         "home_location": "Peterson Cottage",
-        "work_location": "Various volunteer locations"
+        "work_location": "Library"
     },
     
     "Officer Thompson": {
@@ -444,7 +444,7 @@ AGENT_PERSONAS = {
         "daily_routine": ["patrol town", "community meetings", "paperwork", "emergency response"],
         "goals": ["keep town safe", "build community trust", "prevent crime"],
         "home_location": "Thompson Residence",
-        "work_location": "Police station"
+        "work_location": "Town Hall"
     },
     
     "Rachel Kim": {
@@ -462,7 +462,7 @@ AGENT_PERSONAS = {
         "daily_routine": ["work on designs", "client calls", "coffee shop visits", "online networking"],
         "goals": ["build design portfolio", "work-life balance", "integrate into community"],
         "home_location": "The Willows",
-        "work_location": "Hobbs Cafe (works remotely)"
+        "work_location": "Hobbs Cafe"
     },
     
     "Frank Wilson": {
@@ -480,7 +480,7 @@ AGENT_PERSONAS = {
         "daily_routine": ["maintenance rounds", "repair work", "check buildings", "tool maintenance"],
         "goals": ["keep town maintained", "reliable service", "steady income"],
         "home_location": "Wilson Apartment",
-        "work_location": "Various locations around town"
+        "work_location": "Harvey Oak Supply Store"
     }
 }
 

@@ -736,7 +736,16 @@ class GenerativeAgent:
     
     def load_state(self, state: Dict[str, Any]):
         """Load agent state."""
-        self.current_location = state.get("current_location", "")
+        raw_location = state.get("current_location", "")
+        # Snap loaded location to a valid one (fixes "Local restaurant", "Various locations" etc.)
+        if raw_location:
+            from planning_utils import snap_to_valid_location
+            home = self.persona.get("home_location", "Oak Hill College")
+            self.current_location = snap_to_valid_location(raw_location, default=home)
+            if self.current_location != raw_location:
+                logger.info(f"{self.name} load_state: snapped '{raw_location}' → '{self.current_location}'")
+        else:
+            self.current_location = ""
         self.current_sub_area = state.get("current_sub_area", "")
         
         # Load daily plan
