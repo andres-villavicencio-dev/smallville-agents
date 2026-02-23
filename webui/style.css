@@ -233,7 +233,7 @@ body {
 
 .agent-list-location {
     font-size: 9px;
-    color: #0f3460;
+    color: #7a8bbd;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -315,7 +315,7 @@ body {
 .panel-placeholder {
     text-align: center;
     padding: 60px 20px;
-    color: #0f3460;
+    color: #7a8bbd;
 }
 
 .placeholder-icon {
@@ -352,7 +352,7 @@ body {
 
 .section-title {
     font-size: 13px;
-    color: #0f3460;
+    color: #7a8bbd;
     margin-bottom: 8px;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -499,7 +499,7 @@ body {
 
 .memory-time {
     font-size: 9px;
-    color: #0f3460;
+    color: #7a8bbd;
 }
 
 .memory-content {
@@ -510,7 +510,7 @@ body {
 .memory-meta {
     margin-top: 6px;
     font-size: 9px;
-    color: #0f3460;
+    color: #7a8bbd;
 }
 
 .load-more-btn {
@@ -554,7 +554,7 @@ body {
 
 .subsection-title {
     font-size: 11px;
-    color: #0f3460;
+    color: #7a8bbd;
     margin-bottom: 8px;
     text-transform: uppercase;
 }
@@ -585,7 +585,7 @@ body {
 }
 
 .event-time {
-    color: #0f3460;
+    color: #7a8bbd;
     font-size: 9px;
     margin-right: 8px;
 }
@@ -641,7 +641,7 @@ body {
 }
 
 .speaker-name {
-    color: #0f3460;
+    color: #7a8bbd;
     font-weight: bold;
 }
 
@@ -672,7 +672,7 @@ body {
 
 .stat-label {
     font-size: 9px;
-    color: #0f3460;
+    color: #7a8bbd;
     text-transform: uppercase;
     letter-spacing: 1px;
 }
@@ -683,7 +683,7 @@ body {
     border-top: 1px solid #0f3460;
     text-align: center;
     font-size: 10px;
-    color: #0f3460;
+    color: #7a8bbd;
     padding: 4px;
 }
 

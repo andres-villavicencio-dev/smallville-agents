@@ -36,6 +36,7 @@ class SteeringEngine:
         self._loaded = False
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._composite_cache: Dict[str, dict] = {}  # "agent|role" -> composite directions
+        self._vram_reservation_id = None  # GPU queue v2 reservation
 
         logger.info(f"SteeringEngine initialized (model={MODEL_ID}, 4bit={load_in_4bit})")
 
@@ -76,6 +77,17 @@ class SteeringEngine:
         )
 
         self._loaded = True
+        
+        # Register VRAM reservation with GPU queue v2
+        try:
+            sys.path.insert(0, "/home/andus/.openclaw/workspace/gpu-queue")
+            from queue_manager_v2 import gpu_reserve
+            vram_used = int(torch.cuda.memory_allocated() / 1e6)
+            self._vram_reservation_id = gpu_reserve("steering_engine", vram_mb=vram_used + 200, pid=os.getpid())
+            logger.info(f"Registered VRAM reservation: {vram_used + 200}MB (id={self._vram_reservation_id})")
+        except Exception as e:
+            logger.warning(f"Could not register VRAM reservation: {e}")
+        
         logger.info(f"Model loaded. VRAM: {torch.cuda.memory_allocated()/1e9:.1f}GB")
 
     def load_concept(self, concept_name: str):
@@ -286,7 +298,7 @@ class SteeringEngine:
         return await loop.run_in_executor(self._executor, lambda: self.generate(**kwargs))
 
     def unload(self):
-        """Free GPU memory."""
+        """Free GPU memory and release VRAM reservation."""
         if self.model is not None:
             del self.model
             del self.tokenizer
@@ -296,4 +308,16 @@ class SteeringEngine:
             self.controller = None
             self._loaded = False
             torch.cuda.empty_cache()
+            
+            # Release VRAM reservation
+            if self._vram_reservation_id:
+                try:
+                    sys.path.insert(0, "/home/andus/.openclaw/workspace/gpu-queue")
+                    from queue_manager_v2 import gpu_release
+                    gpu_release(self._vram_reservation_id)
+                    logger.info(f"Released VRAM reservation {self._vram_reservation_id}")
+                except Exception as e:
+                    logger.warning(f"Could not release VRAM reservation: {e}")
+                self._vram_reservation_id = None
+            
             logger.info("Model unloaded, VRAM freed")
