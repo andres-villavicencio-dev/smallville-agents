@@ -131,7 +131,10 @@ PIPELINES = {
 
 # Per-pipeline token overrides for the final expert (e.g. judge needs more room for plans)
 PIPELINE_TOKEN_OVERRIDES = {
-    "plan_day": {"judge": 500},
+    "plan_day": {"judge": 1000},
+    "should_converse": {"social": 1000},  # Allow room for Qwen3 thinking (can be verbose)
+    "decide_action": {"judge": 1000},     # Allow room for Qwen3 thinking
+    "reflect": {"judge": 1200},           # Reflections can be very long
 }
 
 
@@ -726,8 +729,16 @@ async def should_converse(agent_name: str, situation: str) -> bool:
     if COMMITTEE_BACKEND == "steering":
         committee = get_committee()
         result = await committee.consult("should_converse", situation, agent_name)
-        should = result.strip().upper().startswith("YES") if result else False
-        logger.info(f"[should_converse/steered] {agent_name}: {'YES' if should else 'NO'} — {result[:100] if result else 'empty'}")
+        
+        # Clean up <think> blocks before checking
+        import re
+        clean_result = re.sub(r'<think>.*?</think>', '', result, flags=re.DOTALL).strip()
+        
+        # Handle markdown formatting (e.g. **YES**, *YES*)
+        clean_upper = clean_result.upper()
+        should = clean_upper.startswith("YES") or clean_upper.startswith("**YES") or clean_upper.startswith("*YES")
+        
+        logger.info(f"[should_converse/steered] {agent_name}: {'YES' if should else 'NO'} — {clean_result[:100] if clean_result else 'empty'}")
         return should
 
     committee = get_committee()

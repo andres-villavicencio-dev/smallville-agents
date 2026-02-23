@@ -112,7 +112,7 @@ class SteeringEngine:
         agent_name: str = "",
         agent_concepts: Optional[Dict[str, float]] = None,
         pipeline_role: str = "",
-        max_new_tokens: int = 200,
+        max_new_tokens: int = 1024,
         temperature: float = 0.7,
     ) -> str:
         """
@@ -157,10 +157,14 @@ class SteeringEngine:
         )
 
     def _tokenize_chat(self, prompt: str):
-        """Tokenize prompt using Gemma chat template, return input_ids tensor on device."""
+        """Tokenize prompt using chat template, return input_ids tensor on device."""
         messages = [{"role": "user", "content": prompt}]
+        # Disable Qwen3 thinking mode — we need direct answers, not internal reasoning
+        template_kwargs = {"return_tensors": "pt", "add_generation_prompt": True}
+        if "Qwen" in MODEL_ID:
+            template_kwargs["enable_thinking"] = False
         result = self.tokenizer.apply_chat_template(
-            messages, return_tensors="pt", add_generation_prompt=True
+            messages, **template_kwargs
         )
         # apply_chat_template may return a BatchEncoding or raw tensor depending on version
         if hasattr(result, 'input_ids'):
@@ -176,12 +180,30 @@ class SteeringEngine:
         import re
         new_ids = output_ids[0, input_ids.shape[1]:]
         text = self.tokenizer.decode(new_ids, skip_special_tokens=True).strip()
-        # Strip Qwen3 thinking blocks — keep only the final answer
+        
+        # Debug: log raw output before stripping
+        if '<think>' in text:
+            logger.debug(f"Raw output (first 500 chars): {text[:500]}")
+        
+        # Strip Qwen3 thinking blocks
+        # Handle closed blocks
         text = re.sub(r'<think>.*?</think>\s*', '', text, flags=re.DOTALL)
-        return text.strip()
+        # Handle unclosed blocks (if max_new_tokens hit mid-thought) - remove everything
+        if '<think>' in text:
+            logger.warning(f"Unclosed <think> block detected — output truncated mid-thought. Increase max_new_tokens.")
+            text = re.sub(r'<think>.*', '', text, flags=re.DOTALL)
+        
+        result = text.strip()
+        if not result:
+            logger.warning(f"Empty result after stripping think blocks. Raw length was {len(text)}")
+        return result
 
     def _generate_plain(self, prompt: str, max_new_tokens: int, temperature: float) -> str:
         """Generate without steering."""
+        # Qwen3 needs more tokens for thinking
+        if "Qwen" in MODEL_ID and max_new_tokens < 1024:
+            max_new_tokens = 2048
+        
         input_ids = self._tokenize_chat(prompt)
         outputs = self.model.generate(
             input_ids,
@@ -230,6 +252,10 @@ class SteeringEngine:
         cache_key: str = "",
     ) -> str:
         """Generate with multi-concept steering via summed direction hooks."""
+        # Qwen3 needs more tokens for thinking
+        if "Qwen" in MODEL_ID and max_new_tokens < 1024:
+            max_new_tokens = 2048
+
         from generation_utils import hook_model, clear_hooks
 
         composite_directions = self._get_composite_directions(agent_concepts, cache_key)

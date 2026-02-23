@@ -66,6 +66,9 @@ class GenerativeAgent:
         self.current_sub_area = ""
         self.last_reflection_time = datetime.now()
         self.reflection_count = 0
+        # Stanford-style countdown counter: starts at threshold, decremented by each observation's importance
+        self.importance_trigger_remaining = IMPORTANCE_THRESHOLD
+        self.importance_ele_n = 0  # number of events since last reflection
         
         # Initialize with special memories if defined
         self._initialize_special_memories()
@@ -109,6 +112,10 @@ class GenerativeAgent:
             memory_id = self.memory_stream.add_memory(memory)
             logger.debug(f"{self.name} observed (importance {importance_score}): {observation}")
             
+            # Stanford-style: decrement countdown counter by this event's importance
+            self.importance_trigger_remaining -= importance_score
+            self.importance_ele_n += 1
+            
             # Check if reflection should be triggered
             await self._check_reflection_trigger()
             
@@ -128,27 +135,22 @@ class GenerativeAgent:
             return memory
     
     async def _check_reflection_trigger(self):
-        """Check if reflection should be triggered based on recent importance."""
-        # Cooldown: don't reflect if we reflected in the last 10 minutes (real time)
-        if (datetime.now() - self.last_reflection_time).total_seconds() < 600:
-            return
+        """Check if reflection should be triggered — Stanford-style countdown counter.
         
+        Each observation's importance score is subtracted from the counter.
+        When counter hits 0, reflect and reset. No time-based cooldown.
+        """
         # Suppress reflection storm on startup: skip if sim has been running < 2 minutes
         if hasattr(self, '_sim_start_time') and (datetime.now() - self._sim_start_time).total_seconds() < 120:
             return
         
-        # Only count importance of memories created SINCE last reflection
-        # This effectively "resets" the accumulator after each reflection
-        recent_importance_sum = self.memory_stream.get_importance_since(
-            since=self.last_reflection_time, exclude_types=["reflection"]
-        )
-        
-        if recent_importance_sum >= IMPORTANCE_THRESHOLD:
-            logger.info(f"{self.name} reflection triggered (importance sum: {recent_importance_sum})")
-            # Always update last_reflection_time BEFORE reflecting
-            # This prevents re-triggering if the reflection fails
+        if self.importance_trigger_remaining <= 0 and self.importance_ele_n > 0:
+            logger.info(f"{self.name} reflection triggered (counter exhausted, {self.importance_ele_n} events)")
             self.last_reflection_time = datetime.now()
             await self.reflect()
+            # Reset counter after reflection (Stanford: reset_reflection_counter)
+            self.importance_trigger_remaining = IMPORTANCE_THRESHOLD
+            self.importance_ele_n = 0
     
     async def reflect(self) -> List[Memory]:
         """Perform reflection process as described in the paper.
@@ -592,13 +594,96 @@ class GenerativeAgent:
 
     async def react_to_conversation(self, other_agent: str, conversation_summary: str, 
                                       current_time: datetime) -> bool:
-        """React to a completed conversation by potentially modifying the daily plan.
-        Returns True if the plan was modified."""
-        logger.info(f"[replan] {self.name} evaluating plan after talking to {other_agent}")
-        # No re-plan cap — agents should be free to reschedule organically
-        # (Exp 2 showed the cap suppressed party attendance emergence)
+        """React to a completed conversation — Stanford-style.
         
-        # Get remaining plan items
+        After every conversation, generates:
+        1. A planning thought (how should this affect my plans?)
+        2. A memo thought (what did I learn?)
+        Both are stored as high-importance memories that feed into future planning.
+        Then attempts to replan based on the planning thought.
+        Returns True if the plan was modified.
+        """
+        logger.info(f"[replan] {self.name} processing conversation with {other_agent}")
+        
+        conv_short = conversation_summary[:500] if len(conversation_summary) > 500 else conversation_summary
+        
+        # === STEP 1: Generate planning thought (Stanford: generate_planning_thought_on_convo) ===
+        planning_prompt = (
+            f"You are {self.name}. You just had this conversation with {other_agent}:\n\n"
+            f"{conv_short}\n\n"
+            f"What is the main takeaway for your planning today? "
+            f"Write one sentence about how this conversation should affect what you do next. "
+            f"Be specific about any events, invitations, or plans mentioned."
+        )
+        
+        # === STEP 2: Generate memo thought (Stanford: generate_memo_on_convo) ===
+        memo_prompt = (
+            f"You are {self.name}. You just had this conversation with {other_agent}:\n\n"
+            f"{conv_short}\n\n"
+            f"Summarize what you learned in one sentence. Focus on new information, "
+            f"events, opinions, or relationship changes."
+        )
+        
+        planning_thought = None
+        memo_thought = None
+        
+        try:
+            if cfg.USE_COMMITTEE:
+                from committee import get_committee, COMMITTEE_BACKEND
+                committee = get_committee()
+                if COMMITTEE_BACKEND == "steering":
+                    planning_thought = await committee.consult("decide_action", planning_prompt, self.name)
+                    memo_thought = await committee.consult("decide_action", memo_prompt, self.name)
+                else:
+                    from committee import EXPERTS
+                    expert = EXPERTS["social"]
+                    from llm import _notify_llm_status
+                    _notify_llm_status(self.name, "post_conv_planning", expert.model)
+                    planning_thought = await committee._call_model(expert, planning_prompt)
+                    _notify_llm_status(self.name, "post_conv_memo", expert.model)
+                    memo_thought = await committee._call_model(expert, memo_prompt)
+            else:
+                llm = await get_llm_client()
+                planning_thought = await llm.generate(planning_prompt, temperature=0.6, max_tokens=100, task="reflection")
+                memo_thought = await llm.generate(memo_prompt, temperature=0.6, max_tokens=100, task="reflection")
+        except Exception as e:
+            logger.error(f"Error generating post-conversation thoughts for {self.name}: {e}")
+        
+        # Store planning thought as high-importance memory
+        if planning_thought:
+            planning_thought_text = f"For {self.name}'s planning: {planning_thought.strip()}"
+            memory = Memory(
+                agent_name=self.name,
+                description=planning_thought_text,
+                memory_type="thought",
+                importance_score=8,  # High importance — affects planning
+                location=self.current_location
+            )
+            self.memory_stream.add_memory(memory)
+            # Decrement reflection counter (high-importance thought should accelerate reflection)
+            self.importance_trigger_remaining -= 8
+            self.importance_ele_n += 1
+            logger.info(f"[post-conv] {self.name} planning thought: {planning_thought_text[:100]}")
+        
+        # Store memo thought as moderate-importance memory
+        if memo_thought:
+            memo_thought_text = f"{self.name} learned from talking to {other_agent}: {memo_thought.strip()}"
+            memory = Memory(
+                agent_name=self.name,
+                description=memo_thought_text,
+                memory_type="thought",
+                importance_score=6,
+                location=self.current_location
+            )
+            self.memory_stream.add_memory(memory)
+            self.importance_trigger_remaining -= 6
+            self.importance_ele_n += 1
+            logger.info(f"[post-conv] {self.name} memo: {memo_thought_text[:100]}")
+        
+        # Check if reflection should trigger after these high-importance thoughts
+        await self._check_reflection_trigger()
+        
+        # === STEP 3: Try to replan based on conversation ===
         remaining = [item for item in self.daily_plan 
                      if item.end_time() > current_time and not item.completed]
         if not remaining:
@@ -609,10 +694,7 @@ class GenerativeAgent:
                 for item in remaining[:8]
             )
         
-        # Truncate conversation summary
-        conv_short = conversation_summary[:500] if len(conversation_summary) > 500 else conversation_summary
-        
-        prompt = (
+        replan_prompt = (
             f"You are {self.name}. You just finished talking to {other_agent}.\n\n"
             f"Conversation:\n{conv_short}\n\n"
             f"Your remaining plans today:\n{remaining_text}\n\n"
@@ -628,31 +710,28 @@ class GenerativeAgent:
                 from committee import get_committee, COMMITTEE_BACKEND
                 committee = get_committee()
                 if COMMITTEE_BACKEND == "steering":
-                    response = await committee.consult("decide_action", prompt, self.name)
+                    response = await committee.consult("decide_action", replan_prompt, self.name)
                 else:
                     from committee import EXPERTS
                     expert = EXPERTS["social"]
                     from llm import _notify_llm_status
                     _notify_llm_status(self.name, "react_to_conv", expert.model)
-                    response = await committee._call_model(expert, prompt)
+                    response = await committee._call_model(expert, replan_prompt)
             else:
                 llm = await get_llm_client()
-                response = await llm.generate(prompt, temperature=0.6, max_tokens=80, task="react")
+                response = await llm.generate(replan_prompt, temperature=0.6, max_tokens=80, task="react")
             
             if not response:
-                logger.info(f"[replan] {self.name}: no change after talking to {other_agent}")
+                logger.info(f"[replan] {self.name}: no plan change after talking to {other_agent}")
                 return False
             
-            # Try to parse — if it doesn't match TIME format, treat as no-change
             new_item = self._parse_replan_response(response, current_time)
             if not new_item:
                 logger.info(f"[replan] {self.name}: no change — {response[:80]}")
                 return False
             
-            # Insert into plan: remove conflicting items, add new one
             self._inject_plan_item(new_item)
             
-            # Store memory about the decision
             memory = Memory(
                 agent_name=self.name,
                 description=f"Decided to {new_item.description} after talking to {other_agent}",
@@ -666,7 +745,7 @@ class GenerativeAgent:
             return True
             
         except Exception as e:
-            logger.error(f"Error in react_to_conversation for {self.name}: {e}")
+            logger.error(f"Error in react_to_conversation replan for {self.name}: {e}")
             return False
     
     def _parse_replan_response(self, response: str, current_time: datetime) -> Optional[PlanItem]:
@@ -741,7 +820,9 @@ class GenerativeAgent:
             "daily_plan": [item.to_dict() for item in self.daily_plan],
             "current_plan_item": self.current_plan_item.to_dict() if self.current_plan_item else None,
             "last_reflection_time": self.last_reflection_time.isoformat(),
-            "reflection_count": self.reflection_count
+            "reflection_count": self.reflection_count,
+            "importance_trigger_remaining": self.importance_trigger_remaining,
+            "importance_ele_n": self.importance_ele_n
         }
     
     def load_state(self, state: Dict[str, Any]):
@@ -788,3 +869,5 @@ class GenerativeAgent:
         if "last_reflection_time" in state:
             self.last_reflection_time = datetime.fromisoformat(state["last_reflection_time"])
         self.reflection_count = state.get("reflection_count", 0)
+        self.importance_trigger_remaining = state.get("importance_trigger_remaining", IMPORTANCE_THRESHOLD)
+        self.importance_ele_n = state.get("importance_ele_n", 0)
