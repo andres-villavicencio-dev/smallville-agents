@@ -394,19 +394,8 @@ class SmallvilleSimulation:
                 agents_here = list(location.current_agents)
                 
                 if len(agents_here) >= 2:
-                    # Sample pairs to check — limit to MAX_CONV_CHECKS_PER_LOCATION
-                    # to avoid O(n²) LLM calls when many agents are co-located
-                    import random
-                    all_pairs = [
-                        (agents_here[i], agents_here[j])
-                        for i in range(len(agents_here))
-                        for j in range(i+1, len(agents_here))
-                    ]
-                    max_checks = getattr(cfg, 'MAX_CONV_CHECKS_PER_LOCATION', 3)
-                    if len(all_pairs) > max_checks:
-                        all_pairs = random.sample(all_pairs, max_checks)
-
-                    for agent1, agent2 in all_pairs:
+                    for i, agent1 in enumerate(agents_here):
+                        for agent2 in agents_here[i+1:]:
                             pair_key = tuple(sorted([agent1, agent2]))
                             
                             if pair_key in agent_pairs_checked:
@@ -417,10 +406,6 @@ class SmallvilleSimulation:
                             if self.conversation_manager.is_agent_busy(agent1):
                                 continue
                             if self.conversation_manager.is_agent_busy(agent2):
-                                continue
-                            
-                            # Skip if this pair is on cooldown
-                            if self.conversation_manager.is_on_cooldown(agent1, agent2, self.tick_count):
                                 continue
                             
                             # Check if conversation should start

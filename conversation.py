@@ -67,15 +67,12 @@ class Conversation:
         """Get the two participants."""
         return self.agent1, self.agent2
 
-CONVERSATION_COOLDOWN_TICKS = 30  # ~5 min sim time at 10s/tick — no repeat convos between same pair
-
 class ConversationManager:
     """Manages conversations between agents."""
     
     def __init__(self):
         self.active_conversations: Dict[Tuple[str, str], Conversation] = {}
         self.conversation_history: List[Conversation] = []
-        self._cooldowns: Dict[Tuple[str, str], int] = {}  # pair -> tick when cooldown expires
     
     def get_conversation_key(self, agent1: str, agent2: str) -> Tuple[str, str]:
         """Get a consistent key for agent pair."""
@@ -97,17 +94,6 @@ class ConversationManager:
     def active_count(self) -> int:
         """Number of currently active conversations."""
         return len(self.active_conversations)
-    
-    def is_on_cooldown(self, agent1: str, agent2: str, current_tick: int = 0) -> bool:
-        """Check if this pair is on conversation cooldown."""
-        key = self.get_conversation_key(agent1, agent2)
-        expires = self._cooldowns.get(key, 0)
-        return current_tick < expires
-    
-    def set_cooldown(self, agent1: str, agent2: str, current_tick: int):
-        """Set cooldown for a pair after conversation ends."""
-        key = self.get_conversation_key(agent1, agent2)
-        self._cooldowns[key] = current_tick + CONVERSATION_COOLDOWN_TICKS
     
     def get_active_conversation(self, agent1: str, agent2: str) -> Optional[Conversation]:
         """Get active conversation between agents."""
@@ -307,10 +293,6 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
                     logger.info(f"Voice audio generated: {audio_path}")
             except Exception as e:
                 logger.warning(f"Voice generation failed (non-critical): {e}")
-        
-        # Set cooldown so they don't immediately start talking again
-        if current_time is not None and hasattr(self, '_current_tick'):
-            self.set_cooldown(conversation.agent1, conversation.agent2, self._current_tick)
         
         # Trigger reactive re-planning for both participants
         if agents and current_time and conversation.turns:
