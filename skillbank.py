@@ -70,7 +70,10 @@ class SkillBank:
 
     def _init_tables(self):
         """Create skills table if it doesn't exist."""
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite3.connect(self.db_path, timeout=30) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS skills (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,7 +105,7 @@ class SkillBank:
     def add_skill(self, skill: Skill) -> int:
         """Store a new skill. Returns the skill ID."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO skills (
@@ -132,7 +135,7 @@ class SkillBank:
                    limit: int = 50) -> List[Skill]:
         """Retrieve skills with optional filters."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 query = "SELECT * FROM skills WHERE agent_name = ?"
                 params: list = [self.agent_name]
                 if category:
@@ -194,7 +197,7 @@ class SkillBank:
             alpha = 0.3  # EMA weight for new observation
             new_eff = alpha * outcome + (1 - alpha) * old
 
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 conn.execute("""
                     UPDATE skills SET effectiveness = ?, updated_at = ? WHERE id = ?
                 """, (new_eff, datetime.now().isoformat(), skill_id))
@@ -247,7 +250,7 @@ class SkillBank:
     def get_stats(self) -> Dict[str, Any]:
         """Summary statistics for display / logging."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     SELECT skill_category, COUNT(*), AVG(effectiveness)
@@ -271,7 +274,7 @@ class SkillBank:
     def _rebuild_vectors(self):
         """Rebuild TF-IDF vectors from all skills."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     SELECT id, name, principle, when_to_apply, effectiveness
@@ -309,7 +312,7 @@ class SkillBank:
 
     def _get_skill_by_id(self, skill_id: int) -> Optional[Skill]:
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT * FROM skills WHERE id = ?", (skill_id,))
                 row = cursor.fetchone()
@@ -320,7 +323,7 @@ class SkillBank:
 
     def _get_effectiveness(self, skill_id: int) -> float:
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT effectiveness FROM skills WHERE id = ?", (skill_id,))
                 row = cursor.fetchone()
@@ -330,7 +333,7 @@ class SkillBank:
 
     def _increment_use_count(self, skill_id: int):
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 conn.execute("""
                     UPDATE skills SET use_count = use_count + 1, updated_at = ?
                     WHERE id = ?
@@ -348,7 +351,7 @@ class SkillBank:
         if not skill_ids:
             return []
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 placeholders = ','.join('?' * len(skill_ids))
                 cursor = conn.cursor()
                 cursor.execute(f"""
@@ -367,7 +370,7 @@ class SkillBank:
         if not skill_ids:
             return
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 placeholders = ','.join('?' * len(skill_ids))
                 conn.execute(f"""
                     UPDATE skills SET use_count = use_count + 1, updated_at = ?

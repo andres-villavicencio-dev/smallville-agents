@@ -75,7 +75,10 @@ class OllamaClient:
         """Generate using GPU queue."""
         try:
             full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-            response = ollama_query(full_prompt, model=model)
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None, lambda: ollama_query(full_prompt, model=model)
+            )
             return response.strip()
         except Exception as e:
             logger.error(f"GPU queue generation failed ({model}): {e}")

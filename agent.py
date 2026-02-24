@@ -644,8 +644,10 @@ class GenerativeAgent:
                     memo_thought = await committee._call_model(expert, memo_prompt)
             else:
                 llm = await get_llm_client()
-                planning_thought = await llm.generate(planning_prompt, temperature=0.6, max_tokens=100, task="reflection")
-                memo_thought = await llm.generate(memo_prompt, temperature=0.6, max_tokens=100, task="reflection")
+                planning_thought, memo_thought = await asyncio.gather(
+                    llm.generate(planning_prompt, temperature=0.6, max_tokens=100, task="reflection"),
+                    llm.generate(memo_prompt, temperature=0.6, max_tokens=100, task="reflection"),
+                )
         except Exception as e:
             logger.error(f"Error generating post-conversation thoughts for {self.name}: {e}")
         

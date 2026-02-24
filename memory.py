@@ -64,7 +64,10 @@ class MemoryStream:
     def _init_database(self):
         """Initialize the SQLite database with tables and triggers."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA synchronous=NORMAL")
+
                 # Create main memories table
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS memories (
@@ -142,7 +145,7 @@ class MemoryStream:
     def add_memory(self, memory: Memory) -> int:
         """Add a memory to the stream."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO memories (
@@ -174,7 +177,7 @@ class MemoryStream:
                     memory_type: Optional[str] = None) -> List[Memory]:
         """Get memories for the agent."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 query = "SELECT * FROM memories WHERE agent_name = ?"
                 params = [self.agent_name]
                 
@@ -295,7 +298,7 @@ class MemoryStream:
     def _update_memory_access_time(self, memory_id: int, access_time: datetime):
         """Update the last access time for a memory."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 conn.execute("""
                     UPDATE memories
                     SET last_access_timestamp = ?
@@ -310,7 +313,7 @@ class MemoryStream:
         if not memory_ids:
             return
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 placeholders = ','.join('?' * len(memory_ids))
                 conn.execute(f"""
                     UPDATE memories
@@ -327,7 +330,7 @@ class MemoryStream:
             since = datetime.now() - timedelta(hours=24)
         
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 cursor = conn.cursor()
                 if exclude_types:
                     placeholders = ",".join("?" for _ in exclude_types)
@@ -351,7 +354,7 @@ class MemoryStream:
     def search_memories_fts(self, query: str, limit: int = 20) -> List[Memory]:
         """Search memories using FTS5 full-text search."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     SELECT m.* FROM memories m

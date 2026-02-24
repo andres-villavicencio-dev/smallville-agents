@@ -4,6 +4,7 @@ import argparse
 import signal
 import json
 import logging
+import logging.handlers
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import sys
@@ -26,7 +27,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('simulation.log'),
+        logging.handlers.RotatingFileHandler('simulation.log', maxBytes=50_000_000, backupCount=3),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -412,9 +413,13 @@ class SmallvilleSimulation:
                                 continue
                             agent_pairs_checked.add(pair_key)
                             
-                            # Skip if already in conversation or on cooldown
-                            if self.conversation_manager.has_active_conversation(agent1, agent2):
+                            # Skip if either agent is already in ANY conversation
+                            if self.conversation_manager.is_agent_busy(agent1):
                                 continue
+                            if self.conversation_manager.is_agent_busy(agent2):
+                                continue
+                            
+                            # Skip if this pair is on cooldown
                             if self.conversation_manager.is_on_cooldown(agent1, agent2, self.tick_count):
                                 continue
                             

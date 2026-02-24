@@ -227,8 +227,8 @@ class SteeringEngine:
 
     def _generate_plain(self, prompt: str, max_new_tokens: int, temperature: float) -> str:
         """Generate without steering."""
-        # Qwen3 needs more tokens for thinking
-        if "Qwen" in MODEL_ID and max_new_tokens < 1024:
+        # Qwen3 needs more tokens for thinking (only for substantive generations, not short-answer tasks)
+        if "Qwen" in MODEL_ID and 100 <= max_new_tokens < 1024:
             max_new_tokens = 2048
         
         input_ids = self._tokenize_chat(prompt)
@@ -279,8 +279,8 @@ class SteeringEngine:
         cache_key: str = "",
     ) -> str:
         """Generate with multi-concept steering via summed direction hooks."""
-        # Qwen3 needs more tokens for thinking
-        if "Qwen" in MODEL_ID and max_new_tokens < 1024:
+        # Qwen3 needs more tokens for thinking (only for substantive generations, not short-answer tasks)
+        if "Qwen" in MODEL_ID and 100 <= max_new_tokens < 1024:
             max_new_tokens = 2048
 
         from generation_utils import hook_model, clear_hooks
