@@ -79,12 +79,27 @@ class SteeringEngine:
         self._loaded = True
         
         # Register VRAM reservation with GPU queue v2
+        # Use nvidia-smi for actual VRAM (PyTorch undercounts by ~2x due to CUDA context)
         try:
             sys.path.insert(0, "/home/andus/.openclaw/workspace/gpu-queue")
             from queue_manager_v2 import gpu_reserve
-            vram_used = int(torch.cuda.memory_allocated() / 1e6)
-            self._vram_reservation_id = gpu_reserve("steering_engine", vram_mb=vram_used + 200, pid=os.getpid())
-            logger.info(f"Registered VRAM reservation: {vram_used + 200}MB (id={self._vram_reservation_id})")
+            import subprocess
+            result = subprocess.run(
+                ["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5
+            )
+            vram_used = 0
+            for line in result.stdout.strip().split('\n'):
+                parts = line.split(',')
+                if len(parts) == 2 and int(parts[0].strip()) == os.getpid():
+                    vram_used = int(parts[1].strip())
+                    break
+            if vram_used == 0:
+                vram_used = int(torch.cuda.memory_allocated() / 1e6) + 500
+            # Add 200 MB headroom for inference spikes
+            vram_budget = vram_used + 200
+            self._vram_reservation_id = gpu_reserve("steering_engine", vram_mb=vram_budget, pid=os.getpid())
+            logger.info(f"Registered VRAM reservation: {vram_budget}MB actual (nvidia-smi: {vram_used}MB, id={self._vram_reservation_id})")
         except Exception as e:
             logger.warning(f"Could not register VRAM reservation: {e}")
         

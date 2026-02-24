@@ -68,10 +68,21 @@ ROUTINE_IMPORTANCE_KEYWORDS = {
 
 # Environment Configuration
 SMALLVILLE_LOCATIONS = {
+    # Residential — family homes
     "Lin Family Home": ["kitchen", "living_room", "bedroom", "bathroom"],
     "Moreno Family Home": ["kitchen", "living_room", "bedroom", "bathroom"],
     "Moore Family Home": ["kitchen", "living_room", "bedroom", "bathroom"],
     "The Willows": ["apartment_1a", "apartment_2b", "apartment_3c", "hallway"],
+    # Residential — individual homes
+    "Williams Residence": ["living_room", "bedroom", "study", "kitchen"],
+    "Anderson Residence": ["living_room", "bedroom", "study", "kitchen"],
+    "Davis Residence": ["living_room", "bedroom", "studio", "kitchen"],
+    "Mayor Residence": ["living_room", "bedroom", "study", "kitchen"],
+    "Peterson Cottage": ["living_room", "bedroom", "garden", "kitchen"],
+    "Thompson Residence": ["living_room", "bedroom", "garage", "kitchen"],
+    "Wilson Apartment": ["living_room", "bedroom", "kitchen"],
+    "Rodriguez Home": ["living_room", "bedroom", "kitchen", "bathroom"],
+    # Public / commercial
     "Oak Hill College": ["classroom_a", "classroom_b", "library", "cafeteria"],
     "Harvey Oak Supply Store": ["front_counter", "aisles", "storage_room"],
     "The Rose and Crown Pub": ["bar_area", "dining_area", "back_room"],

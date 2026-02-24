@@ -89,6 +89,8 @@ class SmallvilleWebUI:
         self.app.router.add_get("/api/agent/{name}/conversations", self.handle_agent_conversations)
         self.app.router.add_get("/api/conversations", self.handle_conversations)
         self.app.router.add_get("/api/locations", self.handle_locations)
+        self.app.router.add_post("/api/pause", self.handle_pause)
+        self.app.router.add_post("/api/resume", self.handle_resume)
 
         # Static files served from webui/ directory (CSS, JS, images)
         static_dir = Path(__file__).parent / "webui"
@@ -156,11 +158,11 @@ class SmallvilleWebUI:
         sim = self.simulation
 
         if msg_type == "pause":
-            sim.pause()
+            sim.pause(yield_vram=data.get("yield_vram", False))
             await ws.send_json({"type": "ack", "action": "pause"})
 
         elif msg_type == "resume":
-            sim.resume()
+            await sim.resume()
             await ws.send_json({"type": "ack", "action": "resume"})
 
         elif msg_type == "set_speed":
@@ -410,6 +412,17 @@ class SmallvilleWebUI:
             })
 
         return web.json_response({"count": len(locations), "locations": locations})
+
+    async def handle_pause(self, request: web.Request) -> web.Response:
+        """POST /api/pause?yield_vram=true — pause sim, optionally unload GPU."""
+        yield_vram = request.query.get("yield_vram", "false").lower() == "true"
+        self.simulation.pause(yield_vram=yield_vram)
+        return web.json_response({"status": "paused", "yield_vram": yield_vram})
+
+    async def handle_resume(self, request: web.Request) -> web.Response:
+        """POST /api/resume — resume sim, reload GPU if needed."""
+        await self.simulation.resume()
+        return web.json_response({"status": "resumed"})
 
     # ------------------------------------------------------------------
     # Helpers

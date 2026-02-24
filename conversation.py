@@ -9,6 +9,10 @@ from skillbank import SkillBank, distill_conversation_skill
 from llm import get_llm_client
 from personas import get_agent_persona, format_agent_description
 import config as cfg
+try:
+    from voice_integration import voice_conversation_end
+except ImportError:
+    voice_conversation_end = None
 from prompts import (
     CONVERSATION_INITIATION_PROMPT,
     CONVERSATION_RESPONSE_PROMPT,
@@ -282,6 +286,15 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
         )
         
         logger.info(f"Ended conversation between {conversation.agent1} and {conversation.agent2}")
+        
+        # Generate voice audio for the conversation (non-blocking)
+        if voice_conversation_end is not None:
+            try:
+                audio_path = await voice_conversation_end(conversation)
+                if audio_path:
+                    logger.info(f"Voice audio generated: {audio_path}")
+            except Exception as e:
+                logger.warning(f"Voice generation failed (non-critical): {e}")
         
         # Set cooldown so they don't immediately start talking again
         if current_time is not None and hasattr(self, '_current_tick'):

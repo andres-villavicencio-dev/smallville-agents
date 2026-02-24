@@ -1,327 +1,246 @@
-# Reproducing Paper Results - Generative Agents: Interactive Simulacra of Human Behavior - with Small Language Models
+# Generative Agents: Reproducing "Interactive Simulacra of Human Behavior" with Small Local Models
 
-A faithful implementation of the Stanford paper "Generative Agents: Interactive Simulacra of Human Behavior" (arXiv:2304.03442) using local Ollama models instead of OpenAI.
+A faithful reproduction of the Stanford paper [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442) — but running entirely on **local small language models** (1B–4B parameters) via Ollama, with no OpenAI dependency.
 
-## Overview
+The twist: instead of one large model, we use a **Committee of Experts** architecture and **Representation Fine-tuning (RFM) neural steering** to give 25 agents distinct personalities from a single 1B model.
 
-This project recreates the groundbreaking generative agents architecture that enables believable human-like behavior in AI agents through:
+## Key Results
 
-- **Memory Stream**: Each agent maintains episodic memories with retrieval based on recency, importance, and relevance
-- **Reflection**: Agents generate high-level insights from their experiences 
-- **Planning**: Hierarchical daily plans that decompose into specific actions
-- **Social Interactions**: Natural conversations between agents based on memory and context
+### The Valentine's Day Party Experiment
+
+The simulation starts on Feb 13th with a single seed memory: *Isabella Rodriguez is planning a Valentine's Day party at Hobbs Cafe on Feb 14th, 5–7 PM.* The question: can small local models produce emergent social behavior — word spreading, agents replanning their day, and actually attending the party?
+
+| Experiment | Architecture | Party Awareness | Attendees | Key Finding |
+|---|---|---|---|---|
+| Exp 1 | Single model (qwen2.5:3b) | 100% | N/A | Flawed — measured lunch, not party |
+| Exp 2 | Single model + replan cap | 80% (20/25) | 0 | Replan cap (3/day) killed emergence |
+| Exp 3 | Committee of Experts | 100% (25/25) | 6 present, 3 deliberate | "Helpers not guests" — agents planned to *fix wiring* at the party, not attend for fun |
+| Exp 4 | Committee + fine-tuned experts | Improved | Marginal | Fine-tuning helped but didn't fix core issue |
+| **Exp 8** | **RFM Neural Steering** ⭐ | **Organic spread** | **51% replan rate** | **Helpers-not-guests FIXED.** Frank Wilson explicitly planned to "Attend Valentine's Day party" |
+
+### The "Helpers Not Guests" Problem
+
+Small models default to *instrumental reasoning* — when told about a party, they plan to inspect wiring, check fire exits, or write safety protocols. Nobody plans to "attend for fun." This is a fundamental limitation of small models that we solved with neural-level personality injection via RFM concept vectors.
 
 ## Architecture
 
-### Core Components
+### Committee of Experts (Exp 3–4)
 
-1. **Memory System** (`memory.py`)
-   - SQLite storage with FTS5 full-text search
-   - TF-IDF vectorization for semantic similarity
-   - Weighted retrieval combining recency, importance, and relevance scores
-   - Exponential decay for recency, LLM scoring for importance
+Instead of one large model, seven specialized small models handle different cognitive tasks:
 
-2. **Agent Class** (`agent.py`)
-   - Individual agents with unique personas and backgrounds
-   - Daily planning with hierarchical decomposition
-   - Reflection triggered by importance threshold
-   - Memory-informed decision making
+| Expert | Model | Role |
+|---|---|---|
+| Social | `smallville-social` (fine-tuned Gemma 2 2B) | Should agents converse? |
+| Dialogue | `smallville-actor` (fine-tuned Gemma 2 2B) | Generate conversation responses |
+| Temporal | `gemma3:1b` | Time-aware planning |
+| Emotional | `llama3.2:3b` | Emotional context |
+| Memory | `gemma3:4b` | Memory synthesis & reflection |
+| Spatial | `qwen2.5:3b` | Location-aware decisions |
+| Judge | `qwen2.5:3b` | Plan evaluation |
 
-3. **Environment** (`environment.py`)  
-   - Smallville world with 12 locations and sub-areas
-   - Agent movement and location tracking
-   - Environmental observations and object interactions
+Sequential execution fits within 8GB VRAM (one model loaded at a time).
 
-4. **Conversation System** (`conversation.py`)
-   - Memory-driven dialogue between agents
-   - Conversation initiation based on relevance and context
-   - Turn-taking with personality-informed responses
+### RFM Neural Steering (Exp 8) ⭐
 
-5. **LLM Interface** (`llm.py`)
-   - Local Ollama integration with GPU queue support
-   - Pi 5 fallback for when main GPU is busy
-   - Templated prompts faithful to the original paper
+A single **Gemma 3 1B** model with **27 personality concept vectors** injected at the neural level via [Representation Fine-tuning Method](https://arxiv.org/abs/2404.03592):
 
-### The Smallville World
+- **27 concepts**: social_warmth, task_focus, creativity, authority, empathy, leadership, curiosity, ambition, humor, patience, assertiveness, etc.
+- Each agent gets a unique blend of concept vectors → distinct personality from the same base model
+- **Only 1.95 GB VRAM** (vs 3.5 GB for Gemma 2 2B fine-tuned)
+- Results: 3,534 conversations, 588 reflections, 51% replan rate in 5+ hours
 
-**Locations:**
-- **Residential**: Lin Family Home, Moreno Family Home, Moore Family Home, The Willows (apartments)
-- **Commercial**: Harvey Oak Supply Store, Hobbs Cafe, The Rose and Crown Pub, Pharmacy  
-- **Public**: Oak Hill College, Johnson Park, Town Hall, Library
+### Voice Integration (KittenTTS)
 
-**25 Unique Agents** including:
-- **John Lin** - Pharmacy owner, family man
-- **Isabella Rodriguez** - Cafe owner planning Valentine's Day party  
-- **Eddy Lin** - Music student, son of John and Mei
-- **Sam Moore** - Mayoral candidate
-- **Dr. Williams** - Town doctor and mentor
-- ...and 20 more with rich backstories and relationships
+Agents have voices! Each of the 25 agents is mapped to one of 8 KittenTTS Nano voices (15M params, 25MB), running on a Raspberry Pi 5 at 1.6x realtime on CPU:
 
-## Installation & Setup
+- Voice endpoint: `http://<pi-ip>:8377/tts`
+- Conversations are automatically synthesized to OGG audio when they end
+- Gender-matched voice assignment across all 25 agents
+
+## Core Components
+
+```
+├── main.py                  # Simulation loop & orchestration
+├── agent.py                 # Agent class with memory, planning, reflection
+├── committee.py             # Committee of Experts / RFM steering engine
+├── conversation.py          # Conversation system with voice hooks
+├── environment.py           # Smallville world (20+ locations)
+├── memory.py                # Memory stream with SQLite + FTS5
+├── reflection_engine.py     # Reflection & conversation evaluation
+├── planning_utils.py        # Location snapping, schedule management
+├── personas.py              # 25 agent definitions with relationships
+├── config.py                # All configuration & location definitions
+├── voice_map.py             # Agent → KittenTTS voice mapping
+├── voice_integration.py     # TTS generation on conversation end
+├── telegram_broadcaster.py  # Live digests to Telegram group
+├── webui.py                 # Web UI on port 3000
+├── finetune/                # QLoRA training scripts & Modelfiles
+│   ├── train.py             # Actor (dialogue) fine-tuning
+│   └── train_social.py      # Social expert fine-tuning
+├── db/memories.db           # Agent memory database
+└── saves/                   # Auto-saved simulation state
+```
+
+## The Smallville World
+
+### Locations (20+)
+
+**Residential:**
+- Lin Family Home, Moreno Family Home, Moore Family Home, The Willows (apartments)
+- Williams Residence, Anderson Residence, Davis Residence, Mayor Residence
+- Peterson Cottage, Thompson Residence, Wilson Apartment, Rodriguez Home
+
+**Commercial & Public:**
+- Oak Hill College, Hobbs Cafe, The Rose and Crown Pub, Harvey Oak Supply Store
+- Johnson Park, Town Hall, Library, Pharmacy
+
+### 25 Agents
+
+Each agent has a name, age, occupation, personality traits, background story, relationships, home/work locations, daily routines, and personal goals. Key characters:
+
+- **Isabella Rodriguez** — Cafe owner, party planner, social hub
+- **John Lin** — Pharmacy owner, family man
+- **Mrs. Peterson** — Retired teacher, community heart
+- **Eddy Lin** — Music student, creative dreamer
+- **Mayor Johnson** — Town leader, always politicking
+- **Dr. Williams** — Town doctor, mentor figure
+- **Frank Wilson** — Maintenance worker (the one who finally attended the party *for fun*)
+
+## Installation
 
 ### Prerequisites
 
-1. **Ollama** - Install and start Ollama with a compatible model
 ```bash
-# Install Ollama (https://ollama.ai)
+# Ollama
 curl -fsSL https://ollama.ai/install.sh | sh
 
-# Start Ollama
-ollama serve
+# Pull required models
+ollama pull gemma3:1b gemma3:4b llama3.2:3b qwen2.5:3b
 
-# Pull recommended model
-ollama pull qwen2.5:3b
-```
-
-2. **Python 3.11+**
-```bash
+# Python environment
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Dependencies
-```
-requests>=2.31.0
-rich>=13.0.0
-numpy>=1.21.0
-scikit-learn>=1.0.0
-```
+### Fine-tuned Models (optional, for Committee mode)
 
-## Running the Simulation
-
-### Quick Start
 ```bash
-# Run with defaults (qwen2.5:3b, 10x speed, 2 days)
-python main.py
-
-# Custom configuration
-python main.py --speed 5 --days 3
-
-# Use different model
-OLLAMA_MODEL=llama3.2:3b python main.py
-
-# Run without GPU queue (direct Ollama calls)
-python main.py --no-gpu-queue
+# If GGUF files exist in finetune/output*/
+ollama create smallville-social -f finetune/output-social/Modelfile
+ollama create smallville-actor -f finetune/output/Modelfile
 ```
 
-### Configuration Options
+### KittenTTS Voice Server (optional)
 
-**Environment Variables:**
-- `OLLAMA_MODEL` - Model to use (default: qwen2.5:3b)
-- `OLLAMA_BASE_URL` - Ollama server URL (default: http://localhost:11434)
-
-**Command Line Arguments:**
-- `--speed N` - Simulation speed (game seconds per real second)
-- `--days N` - Number of simulated days to run
-- `--no-gpu-queue` - Disable GPU queue integration
-- `--load-state FILE` - Resume from saved state
-- `--config` - Show current configuration
-
-### The Valentine's Day Scenario
-
-The simulation starts on February 13th with Isabella Rodriguez having a memory that she's planning a Valentine's Day party at Hobbs Cafe on February 14th, 5-7 PM. Watch as:
-
-- Isabella invites people to the party
-- Word spreads through natural conversations
-- Agents make plans to attend
-- Social dynamics emerge organically
-
-## GPU Queue Integration
-
-The system integrates with OpenClaw's GPU queue for efficient resource management:
-
-```python
-# Automatic GPU queueing
-response = await llm.generate("What are your thoughts on today?")
-
-# Manual queueing for intensive operations
-with gpu_queue("reflection_task"):
-    reflection = await agent.reflect()
-```
-
-**Pi 5 Fallback:** If the main GPU is busy, queries automatically fall back to a Raspberry Pi 5 running gemma3:1b for continued operation.
-
-## Memory System Details
-
-### Memory Types
-- **Observations**: Perceptions of environment and other agents
-- **Reflections**: High-level insights generated from observations  
-- **Plans**: Intended actions and schedules
-
-### Retrieval Scoring
-Each memory gets a combined score from:
-- **Recency**: Exponential decay based on last access (α = 1.0)
-- **Importance**: 1-10 scale rated by LLM (β = 1.0)  
-- **Relevance**: Cosine similarity to query (γ = 1.0)
-
-**Final Score** = α×recency + β×importance + γ×relevance
-
-### Reflection Process
-1. Sum recent observation importance scores
-2. When threshold exceeded (150), trigger reflection
-3. Generate 3 salient questions from last 100 memories
-4. For each question, retrieve relevant memories
-5. Synthesize reflection citing specific memories
-6. Store reflection as high-importance memory
-
-## Planning System
-
-### Hierarchical Planning
-1. **Daily Overview**: Generate 5-8 broad activity chunks
-2. **Action Decomposition**: Break chunks into 5-15 minute actions
-3. **Execution**: Follow plan while adapting to conversations and observations
-4. **Replanning**: Revise plans based on new information
-
-### Example Daily Plan
-```
-6:00 AM - Wake up and morning routine (30 min)
-6:30 AM - Breakfast with family (45 min)  
-7:15 AM - Commute to work (15 min)
-7:30 AM - Open pharmacy and prep for day (60 min)
-...
-```
-
-## Conversation System
-
-### Initiation Conditions
-- Agents in same location
-- Memory retrieval suggests relevance
-- LLM determines appropriateness
-- Consider relationship and context
-
-### Dialogue Generation
-- Retrieve relevant memories about the other agent
-- Consider personality and current emotional state
-- Generate contextual responses
-- Store conversation as memories for both participants
-
-## Display & Monitoring
-
-Rich terminal interface showing:
-- **Real-time Agent Activities**: What each agent is doing and where
-- **Location Populations**: Who is at each location  
-- **Active Conversations**: Ongoing dialogues between agents
-- **Recent Events**: Activity log with timestamps
-- **Simulation Time**: Current game time and simulation speed
-
-### Logs and State
-- **simulation.log**: Detailed logging of all agent activities
-- **saves/**: Automatic state saves for resuming simulation
-- **db/memories.db**: SQLite database of all agent memories
-
-## Research Fidelity
-
-This implementation closely follows the original paper:
-
-### Memory Stream Architecture ✓
-- Weighted retrieval (recency + importance + relevance)
-- Exponential decay functions
-- FTS5 for efficient text search
-- Memory access timestamp updates
-
-### Reflection Implementation ✓  
-- Importance threshold triggering (150 points)
-- Question generation from recent memories
-- Memory citing in reflections
-- High importance scoring for reflections
-
-### Planning System ✓
-- Hierarchical decomposition (daily → actions)
-- Time-based scheduling
-- Location-aware planning
-- Plan revision based on observations
-
-### Agent Architecture ✓
-- 25 unique personas with relationships
-- Personality-driven behavior
-- Memory-informed decision making
-- Social interaction capabilities
-
-## Customization
-
-### Adding New Agents
-Edit `personas.py` to add new characters:
-```python
-"New Agent": {
-    "name": "New Agent",
-    "age": 30,
-    "occupation": "Job Title",
-    "personality": "Trait list",
-    "background": "Background story",
-    "relationships": {"Other Agent": "relationship_type"},
-    "home_location": "Location Name",
-    "work_location": "Location Name"
-}
-```
-
-### Modifying Locations  
-Edit `config.py` to add new locations:
-```python
-SMALLVILLE_LOCATIONS["New Location"] = ["sub_area_1", "sub_area_2"]
-```
-
-### Adjusting Parameters
-Key parameters in `config.py`:
-- `MEMORY_RETRIEVAL_WEIGHTS`: Adjust α, β, γ for memory retrieval
-- `IMPORTANCE_THRESHOLD`: Change reflection trigger (default: 150)
-- `RECENCY_DECAY_FACTOR`: Modify memory decay rate (default: 0.99)
-
-## Performance & Scaling
-
-**Recommended Hardware:**
-- 8GB+ RAM for full 25-agent simulation  
-- GPU with 6GB+ VRAM for qwen2.5:3b
-- SSD for fast SQLite database operations
-
-**Scaling Options:**
-- Reduce agent count for faster simulation
-- Use smaller models (llama3.2:1b) for resource-constrained environments
-- Adjust tick duration and simulation speed
-
-## Troubleshooting
-
-### Common Issues
-
-**Ollama Connection Errors:**
 ```bash
-# Check if Ollama is running
-curl http://localhost:11434/api/tags
-
-# Restart Ollama service
-ollama serve
+# On a Pi 5 or any machine with Python 3.12
+uv venv ~/kittentts-venv --python 3.12
+source ~/kittentts-venv/bin/activate
+UV_SKIP_WHEEL_FILENAME_CHECK=1 uv pip install \
+  https://github.com/KittenML/KittenTTS/releases/download/0.8/kittentts-0.8.0-py3-none-any.whl \
+  soundfile fastapi uvicorn
+python kittentts_server.py  # Runs on port 8377
 ```
 
-**Memory Database Locked:**
-- Stop all simulation instances
-- Check for zombie processes: `ps aux | grep python`
-- Delete lock files if present: `rm db/*.db-*`
+## Running
 
-**GPU Queue Issues:**
-- Check queue status: `python queue_manager.py status`
-- Run without GPU queue: `python main.py --no-gpu-queue`
+```bash
+# Standard run — Committee of Experts, 25 agents, WebUI
+python main.py --committee --num-agents 25 --speed 1000 --webui --webui-port 3000
 
-### Debug Mode
-Enable detailed logging:
-```python
-# In main.py
-logging.getLogger().setLevel(logging.DEBUG)
+# Recommended: run in tmux (sim can run for hours)
+tmux new-session -d -s sim './venv/bin/python3 main.py --committee --num-agents 25 --speed 1000 --webui --webui-port 3000'
+
+# Monitor
+tmux attach -t sim          # Terminal UI
+open http://localhost:3000   # Web UI
 ```
 
-## Contributing
+### Key Options
 
-This implementation aims for research reproducibility. When contributing:
+| Flag | Default | Description |
+|---|---|---|
+| `--committee` | off | Use Committee of Experts (vs single model) |
+| `--num-agents N` | 25 | Number of agents |
+| `--speed N` | 1000 | Simulation speed multiplier |
+| `--webui` | off | Enable web UI |
+| `--webui-port N` | 3000 | Web UI port |
 
-1. Maintain fidelity to the original paper methodology
-2. Document any deviations or optimizations  
-3. Include tests for new functionality
-4. Update docstrings and type hints
+### Environment Variables
 
-## License
+| Variable | Default | Description |
+|---|---|---|
+| `OLLAMA_MODEL` | `qwen2.5:3b` | Default model |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama endpoint |
+| `SMALLVILLE_VOICES` | `1` | Enable/disable voice generation |
+| `KITTENTTS_URL` | `http://192.168.1.70:8377/tts` | KittenTTS endpoint |
+| `COMMITTEE_MODEL_SOCIAL` | `smallville-social` | Social expert model |
+| `DIALOGUE_ACTOR_MODEL` | `smallville-actor` | Dialogue expert model |
 
-MIT License - See LICENSE file for details
+## Memory System
+
+### Types
+- **Observations** — perceptions of environment and agents
+- **Reflections** — high-level insights synthesized from observations
+- **Plans** — intended actions and schedules
+
+### Retrieval
+Each memory scored by: **α×recency + β×importance + γ×relevance**
+- Recency: exponential decay on last access
+- Importance: 1–10 scale (LLM-rated or rule-based)
+- Relevance: TF-IDF cosine similarity to query
+
+### Reflection
+Triggered when cumulative importance exceeds threshold (150). Generates salient questions, retrieves relevant memories, synthesizes insights, stores as high-importance memory.
+
+## Fine-Tuning Pipeline
+
+For training custom experts (QLoRA on Gemma 2 2B):
+
+```bash
+cd finetune/
+# Edit training data in train.py or train_social.py
+python train_social.py  # ~1 min per 50 examples on RTX 3070
+
+# Export: merge → GGUF → Ollama
+# (see finetune/ scripts for details)
+```
+
+Config: LoRA r=64, alpha=128, dropout=0.05, LR=2e-4, cosine schedule. Requires ~5GB VRAM during training.
+
+## Telegram Broadcasting
+
+Live simulation digests every 10 minutes to a Telegram group:
+
+```bash
+python telegram_broadcaster.py  # Requires TELEGRAM_BOT_TOKEN
+```
+
+Shows location clusters, active conversations, replans, party tracking, and reflection highlights.
+
+## Hardware
+
+**Tested on:**
+- **GPU**: NVIDIA RTX 3070 (8GB VRAM) — runs full 25-agent committee
+- **Fallback**: Raspberry Pi 5 (8GB RAM) — Ollama with gemma3:1b + KittenTTS
+- **OS**: Ubuntu 24.04
+
+**VRAM budgets:**
+- Committee mode: ~2–4 GB (sequential model loading)
+- RFM steering: ~1.95 GB (single Gemma 3 1B + vectors)
+- KittenTTS: 0 GPU (CPU-only, runs on Pi)
+
+## Lessons Learned
+
+- Small models (1B–4B) default to instrumental reasoning over social reasoning — the "helpers not guests" problem
+- Fine-tuning helps but doesn't fix the core issue; neural-level personality steering (RFM) does
+- Reflection loops: never count reflections toward their own trigger threshold
+- Conversation cooldowns (30 ticks) prevent agents from re-engaging immediately
+- Location capacity limits cause natural overflow to nearby locations
+- Committee of diverse small models outperforms a single larger model for multi-faceted agent behavior
 
 ## Citation
-
-If you use this implementation in research, please cite both:
 
 ```bibtex
 @article{park2023generative,
@@ -332,13 +251,10 @@ If you use this implementation in research, please cite both:
 }
 ```
 
-## Acknowledgments
+## License
 
-- Original Generative Agents research by Stanford HCI and Google Research
-- OpenClaw framework for LLM integration and GPU queue management
-- Ollama project for local LLM inference
-- Rich library for beautiful terminal interfaces
+MIT
 
 ---
 
-**🏠 Welcome to Smallville - Where AI agents live, learn, and interact!**
+**🏠 Welcome to Smallville — where 25 AI agents live, learn, gossip, and (eventually) attend parties for fun.**

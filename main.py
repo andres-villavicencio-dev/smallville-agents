@@ -98,13 +98,33 @@ class SmallvilleSimulation:
             except Exception:
                 pass
 
-    def pause(self):
-        """Pause the simulation."""
+    def pause(self, yield_vram=False):
+        """Pause the simulation. If yield_vram=True, unload steering engine to free GPU."""
         self._paused = True
-        logger.info("Simulation paused")
+        self._vram_yielded = yield_vram
+        logger.info(f"Simulation paused (yield_vram={yield_vram})")
+        if yield_vram:
+            try:
+                from committee import get_committee, SteeredCommittee
+                committee = get_committee()
+                if isinstance(committee, SteeredCommittee) and committee._engine is not None:
+                    committee._engine.unload()
+                    logger.info("Steering engine unloaded for VRAM yield")
+            except Exception as e:
+                logger.error(f"Failed to unload engine: {e}")
 
-    def resume(self):
-        """Resume the simulation."""
+    async def resume(self):
+        """Resume the simulation. Reload steering engine if it was yielded."""
+        if getattr(self, '_vram_yielded', False):
+            try:
+                from committee import get_committee, SteeredCommittee, ensure_engine_loaded
+                committee = get_committee()
+                if isinstance(committee, SteeredCommittee):
+                    await committee.load_engine()
+                    logger.info("Steering engine reloaded after VRAM yield")
+            except Exception as e:
+                logger.error(f"Failed to reload engine: {e}")
+            self._vram_yielded = False
         self._paused = False
         logger.info("Simulation resumed")
 
