@@ -95,7 +95,7 @@ SMALLVILLE_LOCATIONS = {
 
 # Starting scenario configuration
 START_DATE = "2023-02-13"  # Day before Valentine's Day
-START_TIME = "08:00"
+START_TIME = "06:00"
 
 # Logging Configuration
 LOG_LEVEL = "INFO"

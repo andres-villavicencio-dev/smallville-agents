@@ -86,6 +86,18 @@ class ConversationManager:
         key = self.get_conversation_key(agent1, agent2)
         return key in self.active_conversations
     
+    def is_agent_busy(self, agent_name: str) -> bool:
+        """Check if an agent is already in ANY active conversation."""
+        for (a1, a2) in self.active_conversations:
+            if agent_name in (a1, a2):
+                return True
+        return False
+    
+    @property
+    def active_count(self) -> int:
+        """Number of currently active conversations."""
+        return len(self.active_conversations)
+    
     def is_on_cooldown(self, agent1: str, agent2: str, current_tick: int = 0) -> bool:
         """Check if this pair is on conversation cooldown."""
         key = self.get_conversation_key(agent1, agent2)
