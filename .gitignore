@@ -32,3 +32,14 @@ finetune/llama.cpp/
 finetune/unsloth_compiled_cache/
 finetune/__pycache__/
 finetune/*.log
+
+# Generated audio
+voices/
+
+# Simulation logs
+*.log
+simulation_exp*.log
+
+# Database (regenerated on run)
+db/memories.db
+db/memories.db-*
