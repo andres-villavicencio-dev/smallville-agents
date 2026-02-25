@@ -2,7 +2,11 @@
 
 A faithful reproduction of the Stanford paper [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442) — but running entirely on **local small language models** (1B–4B parameters) via Ollama, with no OpenAI dependency.
 
-The twist: instead of one large model, we use a **Committee of Experts** architecture and **Representation Fine-tuning (RFM) neural steering** to give 25 agents distinct personalities from a single 3B model.
+The twist: instead of one large model, we use a **Committee of Experts** architecture and **Representation Fine-tuning (RFM) neural steering** to give 25 agents distinct personalities from a single 4B model.
+
+![Smallville WebUI — Live simulation dashboard](docs/smallville_webui.gif)
+
+*Live dashboard showing agent activity, conversations, reflections, and simulation statistics.*
 
 ## Key Results
 
