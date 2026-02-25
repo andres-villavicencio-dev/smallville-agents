@@ -42,11 +42,35 @@ Sequential execution fits within 8GB VRAM (one model loaded at a time).
 
 ### RFM Neural Steering (Exp 8) ⭐
 
-A single **QWEN 3 4B** model with **27 personality concept vectors** injected at the neural level via [Representation Fine-tuning Method](https://arxiv.org/abs/2404.03592):
+A single **Qwen3-4B** model with **27 personality concept vectors** injected at the neural level via [Representation Fine-tuning Method](https://arxiv.org/abs/2404.03592):
 
-- **27 concepts**: social_warmth, task_focus, creativity, authority, empathy, leadership, curiosity, ambition, humor, patience, assertiveness, etc.
+- **27 concepts**: social_warmth, task_focus, creativity, authority, empathy, leadership, curiosity, ambition, humor, patience, assertiveness, analytical, academic, community_spirit, playfulness, philosophical, practicality, formality, introversion, nurturing, competitiveness, diplomacy, rebelliousness, nostalgia, spirituality, impulsiveness, stoicism
 - Each agent gets a unique blend of concept vectors → distinct personality from the same base model
+- **VRAM**: ~1.95 GB (Qwen3-4B in 4-bit via bitsandbytes, nf4 quantization)
 - Results: 3,534 conversations, 588 reflections, 51% replan rate in 5+ hours
+
+#### Training RFM Concept Directions
+
+Concept directions are trained using the `steering/train_concepts.py` script, which generates positive/negative prompt pairs for each personality concept and learns to separate them in the model's activation space using the [neural_controllers](https://github.com/representation-engineering/neural_controllers) library.
+
+```bash
+cd steering/
+
+# Train a single concept
+python train_concepts.py --concept social_warmth
+
+# Train all 27 concepts
+python train_concepts.py --all
+```
+
+**How it works:**
+1. For each concept (e.g. `social_warmth`), ~13 positive prompts ("I'm so happy to see you!") and ~13 negative prompts (neutral/cold responses) are fed through Qwen3-4B
+2. RFM extracts the direction in activation space that separates positive from negative examples (8 iterations, 5 PCA components, batch size 2)
+3. The resulting direction vectors and detector classifiers are saved as pickle files in `steering/directions/` (54 files total — one direction + one detector per concept)
+4. At inference time, the `SteeringEngine` loads the base Qwen3-4B model once, then applies per-agent composite steering vectors (weighted blends of concept directions) before each generation call
+5. Each of the 25 agents has a unique personality profile defined in `steering/agent_concepts.py` — a mapping of concept names to intensity weights
+
+**Model evolution:** Gemma 2 2B → Gemma 2 9B (OOM) → Gemma 3 4B (multimodal, OOM) → Gemma 3 1B (text-only, ~1.95 GB) → **Qwen3-4B** (current, best quality-to-VRAM ratio)
 
 ### Voice Integration (KittenTTS)
 
@@ -227,7 +251,7 @@ Shows location clusters, active conversations, replans, party tracking, and refl
 
 **VRAM budgets:**
 - Committee mode: ~2–4 GB (sequential model loading)
-- RFM steering: ~1.95 GB (single QWEN 3 4B + vectors)
+- RFM steering: ~1.95 GB (single Qwen3-4B in 4-bit + concept vectors)
 - KittenTTS: 0 GPU (CPU-only, runs on Pi)
 
 ## Lessons Learned
