@@ -2,7 +2,7 @@
 
 A faithful reproduction of the Stanford paper [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442) — but running entirely on **local small language models** (1B–4B parameters) via Ollama, with no OpenAI dependency.
 
-The twist: instead of one large model, we use a **Committee of Experts** architecture and **Representation Fine-tuning (RFM) neural steering** to give 25 agents distinct personalities from a single 1B model.
+The twist: instead of one large model, we use a **Committee of Experts** architecture and **Representation Fine-tuning (RFM) neural steering** to give 25 agents distinct personalities from a single 3B model.
 
 ## Key Results
 
@@ -16,7 +16,7 @@ The simulation starts on Feb 13th with a single seed memory: *Isabella Rodriguez
 | Exp 2 | Single model + replan cap | 80% (20/25) | 0 | Replan cap (3/day) killed emergence |
 | Exp 3 | Committee of Experts | 100% (25/25) | 6 present, 3 deliberate | "Helpers not guests" — agents planned to *fix wiring* at the party, not attend for fun |
 | Exp 4 | Committee + fine-tuned experts | Improved | Marginal | Fine-tuning helped but didn't fix core issue |
-| **Exp 8** | **RFM Neural Steering** ⭐ | **Organic spread** | **51% replan rate** | **Helpers-not-guests FIXED.** Frank Wilson explicitly planned to "Attend Valentine's Day party" |
+| **Exp 8** | **RFM Neural Steering** ⭐ | **Organic spread** | **51% replan rate** | **Helpers-not-guests FIXED.** Agents explicitly planned to "Attend Valentine's Day party" |
 
 ### The "Helpers Not Guests" Problem
 
@@ -42,11 +42,10 @@ Sequential execution fits within 8GB VRAM (one model loaded at a time).
 
 ### RFM Neural Steering (Exp 8) ⭐
 
-A single **Gemma 3 1B** model with **27 personality concept vectors** injected at the neural level via [Representation Fine-tuning Method](https://arxiv.org/abs/2404.03592):
+A single **QWEN 3 4B** model with **27 personality concept vectors** injected at the neural level via [Representation Fine-tuning Method](https://arxiv.org/abs/2404.03592):
 
 - **27 concepts**: social_warmth, task_focus, creativity, authority, empathy, leadership, curiosity, ambition, humor, patience, assertiveness, etc.
 - Each agent gets a unique blend of concept vectors → distinct personality from the same base model
-- **Only 1.95 GB VRAM** (vs 3.5 GB for Gemma 2 2B fine-tuned)
 - Results: 3,534 conversations, 588 reflections, 51% replan rate in 5+ hours
 
 ### Voice Integration (KittenTTS)
@@ -228,7 +227,7 @@ Shows location clusters, active conversations, replans, party tracking, and refl
 
 **VRAM budgets:**
 - Committee mode: ~2–4 GB (sequential model loading)
-- RFM steering: ~1.95 GB (single Gemma 3 1B + vectors)
+- RFM steering: ~1.95 GB (single QWEN 3 4B + vectors)
 - KittenTTS: 0 GPU (CPU-only, runs on Pi)
 
 ## Lessons Learned
@@ -236,7 +235,6 @@ Shows location clusters, active conversations, replans, party tracking, and refl
 - Small models (1B–4B) default to instrumental reasoning over social reasoning — the "helpers not guests" problem
 - Fine-tuning helps but doesn't fix the core issue; neural-level personality steering (RFM) does
 - Reflection loops: never count reflections toward their own trigger threshold
-- Conversation cooldowns (30 ticks) prevent agents from re-engaging immediately
 - Location capacity limits cause natural overflow to nearby locations
 - Committee of diverse small models outperforms a single larger model for multi-faceted agent behavior
 
