@@ -9,7 +9,7 @@ OLLAMA_BASE_URL = "http://localhost:11434"
 MODELS = {
     "planning":      os.getenv("MODEL_PLANNING",      "qwen2.5:3b"),      # Structured output, daily plans
     "conversation":  os.getenv("MODEL_CONVERSATION",   "smallville-actor"),  # Fine-tuned 2B character actor
-    "reflection":    os.getenv("MODEL_REFLECTION",     "cyankiwi/Qwen3-30B-A3B-Instruct-2507-AWQ-4bit"),  # MoE: 30B quality, ~3B VRAM
+    "reflection":    os.getenv("MODEL_REFLECTION",     "qwen3:30b-a3b"),   # MoE: 30B quality, ~3B VRAM
     "importance":    os.getenv("MODEL_IMPORTANCE",     "gemma3:1b"),       # Fast, called hundreds of times
     "default":       os.getenv("OLLAMA_MODEL",         "qwen2.5:3b"),      # Fallback for anything else
 }
