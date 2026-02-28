@@ -135,7 +135,10 @@ def main():
 
     # Initialize both memory systems
     print("\nInitializing TF-IDF memory stream...")
-    tfidf_stream = MemoryStream(agent_name="TestAgent", db_path=":memory:")
+    import tempfile, os
+    tmp_db = tempfile.mktemp(suffix=".db")
+    tfidf_stream = MemoryStream(agent_name="TestAgent", db_path=tmp_db)
+    tfidf_stream._init_database()  # create schema
 
     print("Initializing Qdrant memory stream...")
     qdrant_stream = QdrantMemoryStream(agent_name="TestAgent")

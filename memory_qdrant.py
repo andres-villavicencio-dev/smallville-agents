@@ -158,12 +158,14 @@ class QdrantMemoryStream:
         # Retrieve more candidates than needed for re-scoring (3x top_k or at least 20)
         search_limit = max(top_k * 3, 20)
 
-        # Semantic search in Qdrant
-        search_results = self.client.search(
+        # Semantic search in Qdrant (v2 API uses query_points)
+        search_response = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_embedding,
-            limit=search_limit
+            query=query_embedding,
+            limit=search_limit,
+            with_payload=True,
         )
+        search_results = search_response.points
 
         if not search_results:
             return []
