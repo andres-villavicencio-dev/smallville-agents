@@ -753,7 +753,7 @@ class SmallvilleScene extends Phaser.Scene {
     }
 
     selectAgent(agentName) {
-        // Clear previous highlight
+        // Clear previous highlight and hide its bubble
         if (this.highlightedAgent && this.agentSprites[this.highlightedAgent]) {
             this.agentSprites[this.highlightedAgent].clearTint();
             // Remove highlight circle
@@ -761,6 +761,8 @@ class SmallvilleScene extends Phaser.Scene {
                 this.highlightCircle.destroy();
                 this.highlightCircle = null;
             }
+            // Hide previous agent's bubble
+            this.updateSpeechBubble(this.highlightedAgent, null);
         }
 
         this.highlightedAgent = agentName;
@@ -1327,8 +1329,12 @@ class SmallvilleScene extends Phaser.Scene {
             const sprite = this.agentSprites[agentName];
             if (!sprite) continue;
 
-            // Update activity bubble
-            this.updateSpeechBubble(agentName, agentData.activity);
+            // Only show speech bubble for the selected (highlighted) agent
+            if (agentName === this.highlightedAgent) {
+                this.updateSpeechBubble(agentName, agentData.activity);
+            } else {
+                this.updateSpeechBubble(agentName, null);
+            }
 
             // Check if location changed - if so, pathfind to new location
             const currentLocation = sprite.currentLocation;
@@ -1417,6 +1423,8 @@ function highlightAgent(agentName) {
 
 function clearHighlight() {
     if (mainScene && mainScene.highlightedAgent) {
+        // Hide the bubble before clearing
+        mainScene.updateSpeechBubble(mainScene.highlightedAgent, null);
         if (mainScene.highlightCircle) {
             mainScene.highlightCircle.destroy();
             mainScene.highlightCircle = null;
