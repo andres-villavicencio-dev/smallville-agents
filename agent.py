@@ -9,7 +9,9 @@ from memory import Memory, MemoryStream
 from skillbank import SkillBank, distill_reflection_skill
 from llm import get_llm_client
 from personas import get_agent_persona, format_agent_description
-from config import IMPORTANCE_THRESHOLD, MAX_RECENT_MEMORIES, ACTION_DURATION_RANGE
+from config import IMPORTANCE_THRESHOLD, MAX_RECENT_MEMORIES, ACTION_DURATION_RANGE, USE_QDRANT
+if USE_QDRANT:
+    from memory_qdrant import QdrantMemoryStream
 import config as cfg
 from prompts import (
     DAILY_PLANNING_PROMPT,
@@ -58,7 +60,7 @@ class GenerativeAgent:
     def __init__(self, name: str, db_path: str = "db/memories.db"):
         self.name = name
         self.persona = get_agent_persona(name)
-        self.memory_stream = MemoryStream(name, db_path)
+        self.memory_stream = QdrantMemoryStream(name) if USE_QDRANT else MemoryStream(name, db_path)
         self.skill_bank = SkillBank(name, db_path)
         self.daily_plan: List[PlanItem] = []
         self.current_plan_item: Optional[PlanItem] = None
