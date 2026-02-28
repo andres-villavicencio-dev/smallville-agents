@@ -295,6 +295,39 @@ class QdrantMemoryStream:
 
         return [self._payload_to_memory(r.id, r.payload) for r in results]
 
+    def get_memories(self, limit: Optional[int] = None,
+                     memory_type: Optional[str] = None) -> List[Memory]:
+        """Get memories for the agent, optionally filtered by type.
+
+        Mirrors MemoryStream.get_memories() interface for drop-in compatibility.
+        Returns memories sorted by creation_timestamp descending.
+        """
+        collection_info = self.client.get_collection(self.collection_name)
+        if collection_info.points_count == 0:
+            return []
+
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+        scroll_filter = None
+        if memory_type:
+            scroll_filter = Filter(
+                must=[FieldCondition(key="memory_type", match=MatchValue(value=memory_type))]
+            )
+
+        scroll_limit = limit if limit else 10000
+        results, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=scroll_filter,
+            limit=scroll_limit,
+            with_payload=True,
+            with_vectors=False,
+        )
+
+        memories = [self._payload_to_memory(r.id, r.payload) for r in results]
+        # Sort by creation_timestamp descending (most recent first)
+        memories.sort(key=lambda m: m.creation_timestamp, reverse=True)
+        return memories
+
     def count(self) -> int:
         """Return the number of memories in the collection."""
         return self.client.get_collection(self.collection_name).points_count
