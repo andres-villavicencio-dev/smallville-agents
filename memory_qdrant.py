@@ -23,6 +23,12 @@ logger = logging.getLogger(__name__)
 # Embedding dimension for all-MiniLM-L6-v2
 EMBEDDING_DIM = 384
 
+# Shared encoder — loaded once at module import, reused across all agents
+# This avoids 25x model loads on startup (saves ~90s and redundant VRAM churn)
+logger.info("Loading shared SentenceTransformer encoder (all-MiniLM-L6-v2)...")
+_SHARED_ENCODER = SentenceTransformer("all-MiniLM-L6-v2")
+logger.info("Shared encoder ready.")
+
 
 class QdrantMemoryStream:
     """Qdrant-backed memory stream with semantic search and paper-based re-scoring."""
@@ -40,8 +46,8 @@ class QdrantMemoryStream:
         # In-memory Qdrant for fast prototyping (no persistence)
         self.client = QdrantClient(":memory:")
 
-        # Sentence transformer for embeddings
-        self.encoder = SentenceTransformer("all-MiniLM-L6-v2")
+        # Use the module-level shared encoder (loaded once for all agents)
+        self.encoder = _SHARED_ENCODER
 
         # Memory metadata cache (id -> Memory object)
         self._memory_cache: dict[int, Memory] = {}
