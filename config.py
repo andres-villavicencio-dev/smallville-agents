@@ -9,7 +9,7 @@ OLLAMA_BASE_URL = "http://localhost:11434"
 MODELS = {
     "planning":      os.getenv("MODEL_PLANNING",      "qwen2.5:3b"),      # Structured output, daily plans
     "conversation":  os.getenv("MODEL_CONVERSATION",   "smallville-actor"),  # Fine-tuned 2B character actor
-    "reflection":    os.getenv("MODEL_REFLECTION",     "gemma3:4b"),       # Synthesis & abstract reasoning
+    "reflection":    os.getenv("MODEL_REFLECTION",     "qwen3:30b-a3b"),   # MoE: 30B quality, ~3B VRAM
     "importance":    os.getenv("MODEL_IMPORTANCE",     "gemma3:1b"),       # Fast, called hundreds of times
     "default":       os.getenv("OLLAMA_MODEL",         "qwen2.5:3b"),      # Fallback for anything else
 }
@@ -24,6 +24,10 @@ USE_COMMITTEE = os.getenv("USE_COMMITTEE", "0") == "1"
 def is_committee_mode() -> bool:
     """Runtime check for committee mode — survives late flag setting."""
     return USE_COMMITTEE
+
+# Memory Backend Configuration
+# Set USE_QDRANT=1 to use semantic vector search instead of TF-IDF
+USE_QDRANT = os.getenv("USE_QDRANT", "0") == "1"
 
 # Memory Stream Configuration
 MEMORY_RETRIEVAL_WEIGHTS = {
