@@ -146,6 +146,12 @@ function handleTick(data) {
     if (state.selectedAgent && state.agents[state.selectedAgent]) {
         updateAgentActivity(state.selectedAgent, state.agents[state.selectedAgent]);
     }
+
+    // Auto-refresh memories at most once per 15 seconds
+    if (state.selectedAgent && (!state.lastMemoryRefresh || Date.now() - state.lastMemoryRefresh > 15000)) {
+        state.lastMemoryRefresh = Date.now();
+        loadMemories(state.selectedAgent, state.memoryType, 0);
+    }
 }
 
 function updateHeader(data) {
@@ -208,6 +214,7 @@ function showToast(message) {
 // ============================================================================
 
 async function selectAgent(agentName) {
+    if (!agentName) { console.warn('selectAgent called with null/undefined'); return; }
     state.selectedAgent = agentName;
     state.memoryPage = 0;
 
@@ -239,19 +246,25 @@ async function selectAgent(agentName) {
         }
     });
 
-    try {
-        // Fetch full agent details
-        const response = await fetch(`/api/agent/${encodeURIComponent(agentName)}`);
-        if (!response.ok) throw new Error('Failed to fetch agent details');
-
-        const data = await response.json();
-        populateAgentDetail(data);
-
-        // Load initial memories
-        await loadMemories(agentName, state.memoryType, 0);
-    } catch (err) {
-        console.error('Error loading agent details:', err);
-        showToast('Error loading agent details');
+    let attempts = 0;
+    while (attempts < 3) {
+        try {
+            const response = await fetch(`/api/agent/${encodeURIComponent(agentName)}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            populateAgentDetail(data);
+            await loadMemories(agentName, state.memoryType, 0);
+            break;
+        } catch (err) {
+            attempts++;
+            console.warn(`Agent detail attempt ${attempts} failed:`, err.message);
+            if (attempts >= 3) {
+                console.error('Error loading agent details after 3 attempts:', err);
+                showToast('Error loading agent details');
+            } else {
+                await new Promise(r => setTimeout(r, 500));
+            }
+        }
     }
 }
 
