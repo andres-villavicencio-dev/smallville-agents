@@ -452,7 +452,14 @@ class SingleModelConversation(ConversationStrategy):
         from personas import format_agent_description, get_agent_persona
 
         # Fix 5: Broaden query to include events and parties
-        query = f"{other_agent} events plans party invite activities conversation"
+        # Turn-aware query: use last utterance to retrieve contextually fresh memories
+        turns = conversation.turns
+        last_utterance = turns[-1].message if turns else ""
+        query = (
+            f"{last_utterance} {other_agent} {speaker}"
+            if last_utterance
+            else f"{other_agent} {speaker} relationship shared history"
+        )
         relevant_memories = memory_stream.retrieve_memories(query, top_k=8)
         memory_descriptions = [mem[0].description for mem in relevant_memories]
 
@@ -506,8 +513,15 @@ class CommitteeConversation(ConversationStrategy):
         persona = get_agent_persona(speaker)
         personality = persona.get("personality", "friendly")
 
-        # Fix 5: Broaden query to include events and parties
-        query = f"{other_agent} events plans party invite activities conversation"
+        # Build a turn-aware query: use the last thing said to pull relevant memories
+        # so each turn retrieves fresh context rather than the same static batch
+        turns = conversation.turns
+        last_utterance = turns[-1].message if turns else ""
+        query = (
+            f"{last_utterance} {other_agent} {speaker}"
+            if last_utterance
+            else f"{other_agent} {speaker} relationship shared history"
+        )
         relevant_memories = memory_stream.retrieve_memories(query, top_k=8)
         memory_descriptions = [mem[0].description for mem in relevant_memories]
 

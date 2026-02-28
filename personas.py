@@ -67,7 +67,7 @@ AGENT_PERSONAS = {
         "age": 34,
         "occupation": "Cafe owner",
         "personality": "Warm, social, organized, creative",
-        "background": "Isabella Rodriguez owns and operates Hobbs Cafe. She's warm and social, loves bringing people together. Currently planning a Valentine's Day party at the cafe.",
+        "background": "Isabella Rodriguez owns and operates Hobbs Cafe. She's warm and social, loves bringing people together.",
         "relationships": {
             "Miguel Rodriguez": "brother",
             "Sarah Chen": "best friend",
@@ -524,13 +524,18 @@ def get_related_agents(agent_name: str) -> List[str]:
     return list(relationships.keys())
 
 def format_agent_description(agent_name: str) -> str:
-    """Format a full description of an agent for prompts."""
+    """Format a public description of an agent for prompts.
+
+    Only includes stable identity info (age, occupation, background, personality).
+    Does NOT include current plans, events being organised, or sim-state details
+    — those should only enter via that agent's own memory stream.
+    """
     persona = get_agent_persona(agent_name)
     if not persona:
         return f"{agent_name} is a resident of Smallville."
-    
+
     description = f"{agent_name} is a {persona['age']}-year-old {persona['occupation']}. "
     description += f"{persona['background']} "
     description += f"Personality: {persona['personality']}."
-    
+
     return description
