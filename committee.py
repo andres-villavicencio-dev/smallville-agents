@@ -45,7 +45,7 @@ class ExpertConfig:
 EXPERTS = {
     "social": ExpertConfig(
         name="Social",
-        model=os.getenv("COMMITTEE_MODEL_SOCIAL", "qwen3.5:2b"),
+        model=os.getenv("COMMITTEE_MODEL_SOCIAL", "qwen3.5:0.8b"),
         role=(
             "You are a social reasoning expert. You analyze relationships, social norms, "
             "and interpersonal dynamics. Given a situation, assess: Who should this person "
@@ -56,7 +56,7 @@ EXPERTS = {
     ),
     "spatial": ExpertConfig(
         name="Spatial",
-        model=os.getenv("COMMITTEE_MODEL_SPATIAL", "qwen3.5:2b"),
+        model=os.getenv("COMMITTEE_MODEL_SPATIAL", "qwen3.5:0.8b"),
         role=(
             "You are a spatial reasoning expert for Smallville. "
             "VALID LOCATIONS (use ONLY these exact names): "
@@ -82,7 +82,7 @@ EXPERTS = {
     ),
     "emotional": ExpertConfig(
         name="Emotional",
-        model=os.getenv("COMMITTEE_MODEL_EMOTIONAL", "qwen3.5:2b"),
+        model=os.getenv("COMMITTEE_MODEL_EMOTIONAL", "qwen3.5:0.8b"),
         role=(
             "You are an emotional intelligence expert. You analyze mood, personality, "
             "and emotional states. Given a situation, assess: How is this person feeling? "
@@ -93,7 +93,7 @@ EXPERTS = {
     ),
     "memory": ExpertConfig(
         name="Memory",
-        model=os.getenv("COMMITTEE_MODEL_MEMORY", "qwen3.5:4b"),
+        model=os.getenv("COMMITTEE_MODEL_MEMORY", "qwen3.5:0.8b"),
         role=(
             "You are a memory and context expert. You analyze past experiences and their relevance. "
             "Given memories and a current situation, assess: What past experience is most relevant? "
@@ -104,7 +104,7 @@ EXPERTS = {
     ),
     "dialogue": ExpertConfig(
         name="Dialogue",
-        model=os.getenv("COMMITTEE_MODEL_DIALOGUE", "qwen3.5:2b"),
+        model=os.getenv("COMMITTEE_MODEL_DIALOGUE", "qwen3.5:0.8b"),
         role=(
             "You are a dialogue writer. Output ONLY the character's spoken words — nothing else. "
             "No narration, no stage directions, no analysis, no personality descriptions, no predictions. "
@@ -115,7 +115,7 @@ EXPERTS = {
     ),
     "judge": ExpertConfig(
         name="Judge",
-        model=os.getenv("COMMITTEE_MODEL_JUDGE", "qwen3.5:2b"),
+        model=os.getenv("COMMITTEE_MODEL_JUDGE", "qwen3.5:0.8b"),
         role=(
             "You are a synthesis expert. You receive assessments from multiple domain experts "
             "and combine them into a single coherent action or response. "
