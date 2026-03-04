@@ -217,6 +217,8 @@ class SmallvilleWebUI:
                 activity = agent.current_plan_item.description
             agents_dict[name] = {
                 "location": agent.current_location or "Unknown",
+                "mood_valence": round(agent.mood_valence, 2),
+                "mood_emoji": agent.mood_emoji,
                 "sub_area": agent.current_sub_area or "",
                 "activity": activity,
                 "llm_active": (name == sim.display.current_llm_agent),

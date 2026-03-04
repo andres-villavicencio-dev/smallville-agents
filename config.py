@@ -27,7 +27,7 @@ def is_committee_mode() -> bool:
 
 # Memory Backend Configuration
 # Set USE_QDRANT=1 to use semantic vector search instead of TF-IDF
-USE_QDRANT = os.getenv("USE_QDRANT", "0") == "1"
+USE_QDRANT = os.getenv("USE_QDRANT", "1") == "1"
 
 # Memory Stream Configuration
 MEMORY_RETRIEVAL_WEIGHTS = {
