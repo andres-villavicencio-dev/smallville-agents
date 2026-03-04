@@ -772,9 +772,11 @@ async def main():
     
     args = parser.parse_args()
     
+    # Import config
+    import config as cfg
+    
     # Enable committee mode via flag
     if args.committee:
-        import config as cfg
         cfg.USE_COMMITTEE = True
         # Re-import so modules pick up the change
         os.environ["USE_COMMITTEE"] = "1"

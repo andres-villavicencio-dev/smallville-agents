@@ -11,7 +11,7 @@ MODELS = {
     "conversation":  os.getenv("MODEL_CONVERSATION",   "smallville-actor"),  # Fine-tuned 2B character actor
     "reflection":    os.getenv("MODEL_REFLECTION",     "qwen3.5:9b-sim"),   # 9B partial offload: rich reflections
     "importance":    os.getenv("MODEL_IMPORTANCE",     "gemma3:1b"),        # Fast, called hundreds of times
-    "default":       os.getenv("OLLAMA_MODEL",         "qwen2.5:3b"),       # Fallback for anything else
+    "default":       os.getenv("OLLAMA_MODEL",         "qwen3.5:4b"),       # Single model for all tasks
 }
 
 # Legacy compat
