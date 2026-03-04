@@ -96,11 +96,17 @@ class SimulationDisplay:
         self.layout["footer"].update(self._create_footer())
     
     def start_display(self):
-        """Start the live display."""
+        """Start the live display (no-op if TUI disabled)."""
         self.real_start_time = datetime.now()
+        if getattr(self, '_tui_disabled', False):
+            return
         self.live = Live(self.layout, refresh_per_second=2, console=self.console)
         self.live.start()
-    
+
+    def disable_tui(self):
+        """Disable the Rich TUI entirely (WebUI-only mode)."""
+        self._tui_disabled = True
+
     def stop_display(self):
         """Stop the live display."""
         if self.live:

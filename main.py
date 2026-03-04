@@ -319,6 +319,16 @@ class SmallvilleSimulation:
         try:
             # Fix 3: Check if a new simulation day has started (8:00 AM) and trigger re-planning
             # Skip tick 0 — agents already planned during initialize()
+            # End-of-day follow-through reflection at 22:00 (before midnight re-plan)
+            if self.tick_count > 0 and self.current_time.hour == 22 and self.current_time.minute == 0 and self.current_time.second < self.tick_duration:
+                logger.info(f"End-of-day: triggering plan follow-through reflections for all agents")
+                self.display.add_event("🌙 End of day — agents reflecting on plan follow-through...")
+                for agent in self.agents.values():
+                    try:
+                        await agent.plan_followthrough_reflection(self.current_time)
+                    except Exception as e:
+                        logger.error(f"Follow-through reflection failed for {agent.name}: {e}")
+
             if self.tick_count > 0 and self.current_time.hour == 8 and self.current_time.minute == 0 and self.current_time.second < self.tick_duration:
                 # New day detected! Re-plan all agents to incorporate yesterday's memories
                 self.display.add_event(f"🌅 New day started: {self.current_time.strftime('%A, %B %d, %Y')} - Re-planning all agents...")
@@ -339,6 +349,7 @@ class SmallvilleSimulation:
 
             # 1. Update agent activities based on plans
             for agent in self.agents.values():
+                agent.tick_mood_decay()
                 new_activity = agent.update_current_activity(self.current_time)
                 
                 # Move agent to planned location if needed
@@ -752,6 +763,8 @@ async def main():
                        help="Number of agents to simulate (5-25, default: 25)")
     parser.add_argument("--config", action="store_true",
                        help="Show configuration and exit")
+    parser.add_argument("--no-tui", action="store_true",
+                       help="Disable Rich terminal UI (use with --webui for WebUI-only mode)")
     parser.add_argument("--webui", action="store_true",
                        help="Enable web UI dashboard")
     parser.add_argument("--webui-port", type=int, default=8080,
@@ -791,6 +804,10 @@ async def main():
     try:
         # Initialize
         await simulation.initialize()
+
+        # Disable TUI if requested (WebUI-only mode)
+        if args.no_tui:
+            simulation.display.disable_tui()
 
         # Start web UI if enabled
         if args.webui:

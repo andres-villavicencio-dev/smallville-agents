@@ -36,7 +36,7 @@ class ExpertConfig:
     name: str
     model: str
     role: str           # System prompt describing this expert's domain
-    max_tokens: int = 150
+    max_tokens: int = -1  # -1 = unlimited, let model stop naturally
     temperature: float = 0.7
 
 
@@ -45,7 +45,7 @@ class ExpertConfig:
 EXPERTS = {
     "social": ExpertConfig(
         name="Social",
-        model=os.getenv("COMMITTEE_MODEL_SOCIAL", "smallville-social"),
+        model=os.getenv("COMMITTEE_MODEL_SOCIAL", "qwen3.5:2b"),
         role=(
             "You are a social reasoning expert. You analyze relationships, social norms, "
             "and interpersonal dynamics. Given a situation, assess: Who should this person "
@@ -56,7 +56,7 @@ EXPERTS = {
     ),
     "spatial": ExpertConfig(
         name="Spatial",
-        model=os.getenv("COMMITTEE_MODEL_SPATIAL", "qwen2.5:3b"),
+        model=os.getenv("COMMITTEE_MODEL_SPATIAL", "qwen3.5:2b"),
         role=(
             "You are a spatial reasoning expert for Smallville. "
             "VALID LOCATIONS (use ONLY these exact names): "
@@ -71,19 +71,18 @@ EXPERTS = {
     ),
     "temporal": ExpertConfig(
         name="Temporal",
-        model=os.getenv("COMMITTEE_MODEL_TEMPORAL", "gemma3:1b"),
+        model=os.getenv("COMMITTEE_MODEL_TEMPORAL", "qwen3.5:0.8b"),
         role=(
             "You are a time and scheduling expert. You analyze time-of-day, deadlines, "
             "and temporal priorities. Given a situation, assess: What time is it? "
             "What's urgent? What should happen next chronologically? "
             "Be concise — 1 sentence max."
         ),
-        max_tokens=60,
         temperature=0.3,
     ),
     "emotional": ExpertConfig(
         name="Emotional",
-        model=os.getenv("COMMITTEE_MODEL_EMOTIONAL", "llama3.2:3b"),
+        model=os.getenv("COMMITTEE_MODEL_EMOTIONAL", "qwen3.5:2b"),
         role=(
             "You are an emotional intelligence expert. You analyze mood, personality, "
             "and emotional states. Given a situation, assess: How is this person feeling? "
@@ -94,7 +93,7 @@ EXPERTS = {
     ),
     "memory": ExpertConfig(
         name="Memory",
-        model=os.getenv("COMMITTEE_MODEL_MEMORY", "gemma3:4b"),
+        model=os.getenv("COMMITTEE_MODEL_MEMORY", "qwen3.5:4b"),
         role=(
             "You are a memory and context expert. You analyze past experiences and their relevance. "
             "Given memories and a current situation, assess: What past experience is most relevant? "
@@ -105,7 +104,7 @@ EXPERTS = {
     ),
     "dialogue": ExpertConfig(
         name="Dialogue",
-        model=os.getenv("COMMITTEE_MODEL_DIALOGUE", "llama3.2:3b"),
+        model=os.getenv("COMMITTEE_MODEL_DIALOGUE", "qwen3.5:2b"),
         role=(
             "You are a dialogue writer. Output ONLY the character's spoken words — nothing else. "
             "No narration, no stage directions, no analysis, no personality descriptions, no predictions. "
@@ -113,11 +112,10 @@ EXPERTS = {
             "Just write 1-2 sentences of natural dialogue as if you ARE the character speaking."
         ),
         temperature=0.9,
-        max_tokens=100,
     ),
     "judge": ExpertConfig(
         name="Judge",
-        model=os.getenv("COMMITTEE_MODEL_JUDGE", "qwen2.5:3b"),
+        model=os.getenv("COMMITTEE_MODEL_JUDGE", "qwen3.5:2b"),
         role=(
             "You are a synthesis expert. You receive assessments from multiple domain experts "
             "and combine them into a single coherent action or response. "
@@ -125,7 +123,6 @@ EXPERTS = {
             "Output a clear, specific action or response — 1-2 sentences max."
         ),
         temperature=0.5,
-        max_tokens=150,
     ),
 }
 
@@ -143,11 +140,12 @@ PIPELINES = {
 
 # Per-pipeline token overrides for the final expert (e.g. judge needs more room for plans)
 PIPELINE_TOKEN_OVERRIDES = {
-    "plan_day": {"judge": 1000},
-    "should_converse": {"social": 1000},  # Allow room for Qwen3 thinking (can be verbose)
-    "decide_action": {"judge": 1000},     # Allow room for Qwen3 thinking
-    "reflect": {"judge": 1200},           # Reflections can be very long
-    "conversation_response": {"memory": 500, "emotional": 500, "dialogue": 300},
+    # All set to -1 (unlimited) - let models generate until they naturally stop
+    "plan_day": {"judge": -1},
+    "should_converse": {"social": -1},
+    "decide_action": {"judge": -1},
+    "reflect": {"judge": -1},
+    "conversation_response": {"memory": -1, "emotional": -1, "dialogue": -1},
 }
 
 
@@ -270,6 +268,12 @@ class Committee:
         """Call an Ollama model (async). Sequential — one at a time for VRAM.
         Retries with backoff if Ollama is temporarily unavailable (e.g. during TTS)."""
         effective_max_tokens = max_tokens_override if max_tokens_override is not None else expert.max_tokens
+        
+        options = {"temperature": expert.temperature}
+        # Only set num_predict if we have a specific limit (-1 means unlimited)
+        if effective_max_tokens > 0:
+            options["num_predict"] = effective_max_tokens
+        
         payload = {
             "model": expert.model,
             "messages": [
@@ -277,10 +281,7 @@ class Committee:
                 {"role": "user", "content": prompt},
             ],
             "stream": False,
-            "options": {
-                "temperature": expert.temperature,
-                "num_predict": effective_max_tokens,
-            },
+            "options": options,
         }
 
         max_retries = 10
@@ -288,7 +289,7 @@ class Committee:
         
         for attempt in range(max_retries):
             try:
-                timeout = aiohttp.ClientTimeout(total=60)
+                timeout = aiohttp.ClientTimeout(total=None)  # No timeout - let models finish
                 async with aiohttp.ClientSession(timeout=timeout) as session:
                     async with session.post(
                         f"{self.base_url}/api/chat",
@@ -405,7 +406,11 @@ class SteeredCommittee(Committee):
         # Determine token limit
         token_overrides = PIPELINE_TOKEN_OVERRIDES.get(pipeline_name, {})
         last_expert = EXPERTS.get(pipeline_role)
-        max_tokens = token_overrides.get(pipeline_role, last_expert.max_tokens if last_expert else 150)
+        max_tokens = token_overrides.get(pipeline_role, last_expert.max_tokens if last_expert else -1)
+        
+        # If unlimited (-1), use a high number for the steering engine
+        if max_tokens == -1:
+            max_tokens = 4096
 
         # Temperature from the final expert
         temperature = last_expert.temperature if last_expert else 0.7
@@ -653,7 +658,7 @@ async def generate_dialogue(agent_name: str, situation: str, memories: str = "",
             
             _notify_llm_status(agent_name, "dialogue (actor)", actor_model)
             
-            timeout = aiohttp.ClientTimeout(total=30)
+            timeout = aiohttp.ClientTimeout(total=None)  # No timeout - let models finish
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     f"{OLLAMA_BASE_URL}/api/chat",
@@ -696,7 +701,7 @@ async def generate_dialogue(agent_name: str, situation: str, memories: str = "",
         
         _notify_llm_status(agent_name, "dialogue (cloud)", cloud_model)
         
-        timeout = aiohttp.ClientTimeout(total=60)
+        timeout = aiohttp.ClientTimeout(total=None)  # No timeout - let models finish
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
                 f"{OLLAMA_BASE_URL}/api/chat",

@@ -4,6 +4,7 @@ Uses sentence-transformers for embeddings and Qdrant for vector search,
 with recency/importance re-scoring to match the original paper's retrieval formula.
 """
 
+import os
 import sqlite3
 import json
 import math
@@ -29,6 +30,13 @@ logger.info("Loading shared SentenceTransformer encoder (all-MiniLM-L6-v2)...")
 _SHARED_ENCODER = SentenceTransformer("all-MiniLM-L6-v2")
 logger.info("Shared encoder ready.")
 
+# Shared Qdrant client — one instance for all agents (file lock allows only one holder)
+_qdrant_path = os.path.join(os.path.dirname(__file__), "qdrant_data")
+os.makedirs(_qdrant_path, exist_ok=True)
+logger.info(f"Opening shared Qdrant client at {_qdrant_path}...")
+_SHARED_CLIENT = QdrantClient(path=_qdrant_path)
+logger.info("Shared Qdrant client ready.")
+
 
 class QdrantMemoryStream:
     """Qdrant-backed memory stream with semantic search and paper-based re-scoring."""
@@ -43,10 +51,8 @@ class QdrantMemoryStream:
         self.agent_name = agent_name
         self.collection_name = collection_name or f"memories_{agent_name.lower().replace(' ', '_')}"
 
-        # In-memory Qdrant for fast prototyping (no persistence)
-        self.client = QdrantClient(":memory:")
-
-        # Use the module-level shared encoder (loaded once for all agents)
+        # Use module-level shared client and encoder (one instance for all 25 agents)
+        self.client = _SHARED_CLIENT
         self.encoder = _SHARED_ENCODER
 
         # Memory metadata cache (id -> Memory object)

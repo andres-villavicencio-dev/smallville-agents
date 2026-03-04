@@ -71,7 +71,10 @@ class GenerativeAgent:
         # Stanford-style countdown counter: starts at threshold, decremented by each observation's importance
         self.importance_trigger_remaining = IMPORTANCE_THRESHOLD
         self.importance_ele_n = 0  # number of events since last reflection
-        
+
+        # Persistent emotional state (valence: -1.0 miserable → +1.0 elated)
+        self.mood_valence: float = 0.0
+
         # Initialize with special memories if defined
         self._initialize_special_memories()
     
@@ -154,6 +157,64 @@ class GenerativeAgent:
             self.importance_trigger_remaining = IMPORTANCE_THRESHOLD
             self.importance_ele_n = 0
     
+    async def plan_followthrough_reflection(self, current_time: datetime):
+        """End-of-day reflection: did I do what I planned? Stored as high-importance memory."""
+        if not self.daily_plan:
+            return
+
+        completed = [p for p in self.daily_plan if p.completed]
+        missed = [p for p in self.daily_plan if not p.completed and p.end_time() <= current_time]
+
+        if not completed and not missed:
+            return  # Nothing to reflect on yet
+
+        completed_text = "\n".join(f"  ✓ {p.description} at {p.location}" for p in completed) or "  (none)"
+        missed_text = "\n".join(f"  ✗ {p.description} at {p.location}" for p in missed) or "  (none)"
+
+        prompt = (
+            f"You are {self.name}. It is the end of the day.\n\n"
+            f"Your completed plans today:\n{completed_text}\n\n"
+            f"Plans you did not complete:\n{missed_text}\n\n"
+            f"Write one honest sentence about how your day went and what you'll do differently tomorrow. "
+            f"Be specific and personal. Speak as yourself."
+        )
+
+        try:
+            if cfg.USE_COMMITTEE:
+                from committee import get_committee
+                committee = get_committee()
+                from committee import EXPERTS
+                expert = EXPERTS["memory"]
+                reflection_text = await committee._call_model(expert, prompt)
+            else:
+                llm = await get_llm_client()
+                reflection_text = await llm.generate(prompt, temperature=0.7, max_tokens=120, task="reflection")
+
+            if not reflection_text:
+                return
+
+            reflection_text = reflection_text.strip()
+            ratio = f"{len(completed)}/{len(completed) + len(missed)}"
+            full_text = f"{self.name} end-of-day ({ratio} plans completed): {reflection_text}"
+
+            memory = Memory(
+                agent_name=self.name,
+                description=full_text,
+                memory_type="reflection",
+                importance_score=7,
+                location=self.current_location,
+            )
+            self.memory_stream.add_memory(memory)
+
+            # Mood: missed plans drag valence down slightly
+            if missed:
+                self._update_mood(-0.05 * len(missed))
+
+            logger.info(f"[followthrough] {self.name} ({ratio}): {reflection_text[:100]}")
+
+        except Exception as e:
+            logger.error(f"plan_followthrough_reflection failed for {self.name}: {e}")
+
     async def reflect(self) -> List[Memory]:
         """Perform reflection process as described in the paper.
 
@@ -580,6 +641,7 @@ class GenerativeAgent:
             if self.current_plan_item:
                 self.current_plan_item.completed = True
                 logger.debug(f"{self.name} completed: {self.current_plan_item.description}")
+                self._update_mood(+0.1)  # small boost for completing something
             
             self.current_plan_item = current_item
             if current_item:
@@ -695,6 +757,9 @@ class GenerativeAgent:
         
         # Check if reflection should trigger after these high-importance thoughts
         await self._check_reflection_trigger()
+
+        # Mood: conversations are socially stimulating — small positive boost
+        self._update_mood(+0.15)
         
         # === STEP 3: Try to replan based on conversation ===
         remaining = [item for item in self.daily_plan 
@@ -808,6 +873,24 @@ class GenerativeAgent:
         updated_plan.sort(key=lambda x: x.start_time)
         self.daily_plan = updated_plan
 
+    def _update_mood(self, delta: float):
+        """Update mood valence with clamping and decay toward neutral."""
+        self.mood_valence = max(-1.0, min(1.0, self.mood_valence + delta))
+
+    def tick_mood_decay(self):
+        """Decay mood toward neutral each sim tick (call once per tick)."""
+        self.mood_valence *= 0.95
+
+    @property
+    def mood_emoji(self) -> str:
+        """Return an emoji reflecting current mood valence."""
+        v = self.mood_valence
+        if v > 0.6:   return "😊"
+        if v > 0.2:   return "🙂"
+        if v > -0.2:  return "😐"
+        if v > -0.5:  return "😔"
+        return "😟"
+
     def get_status_summary(self) -> str:
         """Get a summary of the agent's current status."""
         status = f"{self.name} ({self.persona.get('occupation', 'Unknown')})"
@@ -835,7 +918,8 @@ class GenerativeAgent:
             "last_reflection_time": self.last_reflection_time.isoformat(),
             "reflection_count": self.reflection_count,
             "importance_trigger_remaining": self.importance_trigger_remaining,
-            "importance_ele_n": self.importance_ele_n
+            "importance_ele_n": self.importance_ele_n,
+            "mood_valence": self.mood_valence,
         }
     
     def load_state(self, state: Dict[str, Any]):
@@ -884,3 +968,4 @@ class GenerativeAgent:
         self.reflection_count = state.get("reflection_count", 0)
         self.importance_trigger_remaining = state.get("importance_trigger_remaining", IMPORTANCE_THRESHOLD)
         self.importance_ele_n = state.get("importance_ele_n", 0)
+        self.mood_valence = state.get("mood_valence", 0.0)

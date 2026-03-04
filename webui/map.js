@@ -182,6 +182,7 @@ class SmallvilleScene extends Phaser.Scene {
         this.agentSprites = {};
         this.agentBubbles = {};
         this.agentLabels = {};
+        this.agentMoodEmojis = {};
         this.buildingLabels = {};
         this.highlightedAgent = null;
         this.walkableGrid = [];
@@ -833,6 +834,13 @@ class SmallvilleScene extends Phaser.Scene {
             align: 'center'
         }).setOrigin(0.5, 0).setDepth(201);
         this.agentLabels[agentName] = label;
+
+        // Create mood emoji above sprite
+        const moodEmoji = this.add.text(startX, startY - 18, '😐', {
+            fontSize: '10px',
+            align: 'center'
+        }).setOrigin(0.5, 1).setDepth(202);
+        this.agentMoodEmojis[agentName] = moodEmoji;
     }
 
     createSpeechBubble(agentName) {
@@ -890,6 +898,11 @@ class SmallvilleScene extends Phaser.Scene {
             const label = this.agentLabels[agentName];
             if (label && sprite) {
                 label.setPosition(sprite.x, sprite.y + 12);
+            }
+            // Update mood emoji position
+            const moodEmoji = this.agentMoodEmojis[agentName];
+            if (moodEmoji && sprite) {
+                moodEmoji.setPosition(sprite.x, sprite.y - 18);
             }
         }
 
@@ -1334,6 +1347,12 @@ class SmallvilleScene extends Phaser.Scene {
                 this.updateSpeechBubble(agentName, agentData.activity);
             } else {
                 this.updateSpeechBubble(agentName, null);
+            }
+
+            // Update mood emoji
+            const moodEmoji = this.agentMoodEmojis[agentName];
+            if (moodEmoji && agentData.mood_emoji) {
+                moodEmoji.setText(agentData.mood_emoji);
             }
 
             // Check if location changed - if so, pathfind to new location
