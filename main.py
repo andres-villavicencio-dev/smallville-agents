@@ -1,6 +1,7 @@
 """Main simulation loop for Generative Agents."""
 import asyncio
 import argparse
+import random
 import signal
 import json
 import logging
@@ -18,7 +19,8 @@ from personas import get_all_agent_names, get_agents_by_location, select_agent_s
 import config as cfg
 from config import (
     DEFAULT_SIMULATION_SPEED, TICK_DURATION_SECONDS, DEFAULT_SIM_DAYS, DEFAULT_NUM_AGENTS,
-    START_DATE, START_TIME, get_config
+    START_DATE, START_TIME, get_config,
+    is_hard_sleep_time, conversation_sleep_weight, SLEEP_KEYWORDS
 )
 from llm import set_llm_status_callback
 
@@ -82,6 +84,16 @@ class SmallvilleSimulation:
             logger.warning(f"Invalid start time format, using current time")
             return datetime.now()
     
+    async def _run_planning(self, agents, log_prefix: str = "") -> None:
+        """Run plan_daily_schedule for agents with bounded concurrency."""
+        sem = asyncio.Semaphore(cfg.PLANNING_CONCURRENCY)
+        async def _plan(agent):
+            async with sem:
+                if log_prefix:
+                    logger.info(f"{log_prefix} {agent.name}")
+                await agent.plan_daily_schedule(self.current_time)
+        await asyncio.gather(*[_plan(a) for a in agents])
+
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals."""
         if not self.running:
@@ -197,8 +209,7 @@ class SmallvilleSimulation:
             
             if agents_needing_plans:
                 progress.update_progress(task, f"Generating daily plans ({len(agents_needing_plans)} agents)...")
-                plan_tasks = [a.plan_daily_schedule(self.current_time) for a in agents_needing_plans]
-                await asyncio.gather(*plan_tasks)
+                await self._run_planning(agents_needing_plans)
             else:
                 progress.update_progress(task, f"Resumed {len(self.agents)} agents from saved state")
             
@@ -221,7 +232,11 @@ class SmallvilleSimulation:
     async def run(self, duration_days: int = DEFAULT_SIM_DAYS):
         """Run the simulation for the specified duration."""
         self.running = True
-        end_time = self.current_time + timedelta(days=duration_days)
+        # Compute end_time from the fixed sim epoch (START_DATE + START_TIME), not
+        # from current_time — otherwise a resumed run gets an extra duration_days
+        # tacked on from wherever it left off, effectively running forever.
+        sim_epoch = self._parse_start_time()
+        end_time = sim_epoch + timedelta(days=duration_days)
         
         self.display.print_startup_message()
         
@@ -309,14 +324,12 @@ class SmallvilleSimulation:
                 self.display.add_event(f"🌅 New day started: {self.current_time.strftime('%A, %B %d, %Y')} - Re-planning all agents...")
                 logger.info(f"New simulation day detected at {self.current_time}, triggering re-planning for all agents")
                 
-                # Re-plan all agents in parallel to incorporate memories from previous day conversations
-                plan_tasks = []
-                for agent in self.agents.values():
-                    logger.info(f"Re-planning {agent.name} for new day with fresh memories")
-                    plan_tasks.append(agent.plan_daily_schedule(self.current_time))
-                
+                # Re-plan all agents with limited concurrency
                 try:
-                    await asyncio.gather(*plan_tasks)
+                    await self._run_planning(
+                        self.agents.values(),
+                        log_prefix="Re-planning for new day:"
+                    )
                     self.display.add_event(f"✅ All {len(self.agents)} agents re-planned for the new day")
                     logger.info(f"Successfully re-planned all {len(self.agents)} agents for new day")
                     self.stats["total_plans"] += len(self.agents)
@@ -374,8 +387,17 @@ class SmallvilleSimulation:
                 return
 
             # 3. Check for conversation opportunities (new convos only every N ticks)
+            # Sleep gating: during hard sleep hours, skip new conversation checks entirely.
+            # Existing conversations are still advanced (they can finish naturally).
+            sim_hour = self.current_time.hour
             if self.tick_count % cfg.CONVERSATION_CHECK_INTERVAL == 0:
-                await self._update_conversations()
+                if is_hard_sleep_time(sim_hour):
+                    # Hard sleep window — no new conversations, just advance existing ones
+                    await self._advance_existing_conversations()
+                    if self.tick_count % (cfg.CONVERSATION_CHECK_INTERVAL * 20) == 0:
+                        logger.info(f"[sleep] Hard sleep window ({sim_hour:02d}:xx) — skipping new conversations")
+                else:
+                    await self._update_conversations(sleep_weight=conversation_sleep_weight(sim_hour))
             else:
                 await self._advance_existing_conversations()
             
@@ -384,35 +406,58 @@ class SmallvilleSimulation:
         except Exception as e:
             logger.error(f"Error in simulation step: {e}")
     
-    async def _update_conversations(self):
-        """Update conversations between agents."""
+    async def _update_conversations(self, sleep_weight: float = 1.0):
+        """Update conversations between agents.
+        
+        sleep_weight: 0.0–1.0 multiplier on conversation probability.
+        1.0 = normal daytime, 0.0 = hard sleep (should not reach here), 
+        values in between = soft curfew (twilight / early evening wind-down).
+        """
         try:
+            # Pre-compute sleeping agents once (avoids re-checking per pair)
+            sleeping_agents = {
+                name for name, agent in self.agents.items()
+                if agent.current_plan_item
+                and any(kw in agent.current_plan_item.description.lower()
+                        for kw in SLEEP_KEYWORDS)
+            }
+
             # Check for new conversation opportunities
             agent_pairs_checked = set()
-            
+
             for location_name, location in self.environment.locations.items():
                 agents_here = list(location.current_agents)
-                
+
                 if len(agents_here) >= 2:
                     for i, agent1 in enumerate(agents_here):
                         for agent2 in agents_here[i+1:]:
                             pair_key = tuple(sorted([agent1, agent2]))
-                            
+
                             if pair_key in agent_pairs_checked:
                                 continue
                             agent_pairs_checked.add(pair_key)
-                            
+
                             # Skip if either agent is already in ANY conversation
                             if self.conversation_manager.is_agent_busy(agent1):
                                 continue
                             if self.conversation_manager.is_agent_busy(agent2):
                                 continue
+
+                            # Skip if either agent is sleeping
+                            if agent1 in sleeping_agents or agent2 in sleeping_agents:
+                                continue
+
+                            # Soft curfew: probabilistically skip based on sleep_weight
+                            if sleep_weight < 1.0 and random.random() > sleep_weight:
+                                continue
                             
                             # Check if conversation should start
                             context = f"Both at {location_name}"
+                            if sleep_weight < 1.0:
+                                context += f" (It is late at night — agents may prefer to sleep)"
                             agent1_memory = self.agents[agent1].memory_stream
                             
-                            logger.info(f"Checking conversation: {agent1} <-> {agent2} at {location_name}")
+                            logger.info(f"Checking conversation: {agent1} <-> {agent2} at {location_name} (sleep_weight={sleep_weight:.2f})")
                             should_talk = await self.conversation_manager.should_initiate_conversation(
                                 agent1, agent2, context, agent1_memory
                             )

@@ -343,7 +343,16 @@ class GenerativeAgent:
                      duration_minutes=60),
             PlanItem(description="Dinner and evening relaxation", location=home,
                      start_time=date.replace(hour=18, minute=0, second=0, microsecond=0),
-                     duration_minutes=180),
+                     duration_minutes=120),
+            PlanItem(description="Wind down, personal time at home", location=home,
+                     start_time=date.replace(hour=20, minute=0, second=0, microsecond=0),
+                     duration_minutes=60),
+            PlanItem(description="Prepare for bed and sleep", location=home,
+                     start_time=date.replace(hour=21, minute=0, second=0, microsecond=0),
+                     duration_minutes=60),
+            PlanItem(description="Sleep", location=home,
+                     start_time=date.replace(hour=22, minute=0, second=0, microsecond=0),
+                     duration_minutes=420),  # Sleep until 5am
         ]
         
         # Merge event commitments into the plan (replace overlapping slots)
