@@ -18,6 +18,18 @@ from config import OLLAMA_BASE_URL
 logger = logging.getLogger(__name__)
 
 
+def _extract_from_thinking(msg: dict, label: str = "") -> str:
+    """When a thinking model returns empty content (e.g. num_predict exhausted
+    mid-think), pull the last substantive line from the thinking field."""
+    thinking = msg.get("thinking", "").strip()
+    if not thinking:
+        return ""
+    if label:
+        logger.warning(f"{label}: content empty, extracting from thinking field")
+    lines = [l.strip() for l in thinking.split('\n') if l.strip()]
+    return lines[-1] if lines else ""
+
+
 @dataclass
 class ExpertConfig:
     """Configuration for a domain expert."""
@@ -135,6 +147,7 @@ PIPELINE_TOKEN_OVERRIDES = {
     "should_converse": {"social": 1000},  # Allow room for Qwen3 thinking (can be verbose)
     "decide_action": {"judge": 1000},     # Allow room for Qwen3 thinking
     "reflect": {"judge": 1200},           # Reflections can be very long
+    "conversation_response": {"memory": 500, "emotional": 500, "dialogue": 300},
 }
 
 
@@ -283,7 +296,11 @@ class Committee:
                     ) as resp:
                         resp.raise_for_status()
                         result = await resp.json()
-                        return result["message"]["content"].strip()
+                        msg = result.get("message", {})
+                        content = msg.get("content", "").strip()
+                        if not content:
+                            content = _extract_from_thinking(msg, label=f"{expert.name} expert")
+                        return content
 
             except (aiohttp.ClientConnectionError, asyncio.TimeoutError) as e:
                 delay = min(base_delay * (attempt + 1), 120)
@@ -631,7 +648,6 @@ async def generate_dialogue(agent_name: str, situation: str, memories: str = "",
                     "temperature": 0.8,
                     "top_p": 0.9,
                     "repeat_penalty": 1.1,
-                    "num_predict": 150,
                 },
             }
             
@@ -645,7 +661,8 @@ async def generate_dialogue(agent_name: str, situation: str, memories: str = "",
                 ) as resp:
                     resp.raise_for_status()
                     resp_json = await resp.json()
-                    raw = resp_json.get("message", {}).get("content", "").strip()
+                    msg = resp_json.get("message", {})
+                    raw = msg.get("content", "").strip() or _extract_from_thinking(msg)
             if raw and len(raw) > 5:
                 return _clean_dialogue(raw, agent_name)
             logger.warning(f"Actor model returned empty/short response for {agent_name}, falling back")
@@ -674,7 +691,6 @@ async def generate_dialogue(agent_name: str, situation: str, memories: str = "",
             "stream": False,
             "options": {
                 "temperature": 0.9,
-                "num_predict": 100,
             },
         }
         
@@ -688,7 +704,8 @@ async def generate_dialogue(agent_name: str, situation: str, memories: str = "",
             ) as resp:
                 resp.raise_for_status()
                 resp_json = await resp.json()
-                raw = resp_json.get("message", {}).get("content", "").strip()
+                msg = resp_json.get("message", {})
+                raw = msg.get("content", "").strip() or _extract_from_thinking(msg)
         return _clean_dialogue(raw, agent_name)
     except Exception as e:
         logger.warning(f"Cloud dialogue also failed for {agent_name}: {e}, using local fallback")
@@ -705,6 +722,10 @@ def _clean_dialogue(text: str, agent_name: str) -> str:
     if not text:
         return "I see."
     import re
+    # Strip <tool_call>...<tool_call> blocks from reasoning models (e.g. qwen3.5:9b)
+    text = re.sub(r'<tool_call>.*?<tool_call>', '', text, flags=re.DOTALL).strip()
+    if not text:
+        return "I see."
     # Remove common meta prefixes the model leaks
     meta_patterns = [
         rf"^{re.escape(agent_name)}(?:'s)?\s*(?:next line of dialogue|response|would (?:say|respond))[^\"]*?[,:\n]+\s*",

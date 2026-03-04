@@ -24,7 +24,8 @@ DAILY_PLANNING_PROMPT = """{agent_description}
 
 Here is {agent_name}'s plan for {date}:
 1) wake up and complete the morning routine at 6:00 am
-2) """
+2) {agent_name}'s plan must include going to sleep at night (between 9pm and 11pm) and sleeping until around 5am-7am.
+3) """
 
 CONVERSATION_INITIATION_PROMPT = """Should {agent_name} initiate a conversation with {other_agent}?
 
@@ -38,6 +39,7 @@ Consider:
 - Do they have something specific to discuss?
 - Is it an appropriate time and place for conversation?
 - Would this interaction make sense given their relationship?
+- If it is late at night (after 9pm), people generally prefer to sleep rather than talk. Only initiate if truly urgent or the agents are very close.
 
 Respond with only YES or NO."""
 

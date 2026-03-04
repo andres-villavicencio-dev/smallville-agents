@@ -7,11 +7,11 @@ OLLAMA_BASE_URL = "http://localhost:11434"
 
 # Task-specific models (override with env vars)
 MODELS = {
-    "planning":      os.getenv("MODEL_PLANNING",      "qwen2.5:3b"),      # Structured output, daily plans
+    "planning":      os.getenv("MODEL_PLANNING",      "qwen3.5:9b-sim"),   # 9B partial offload: 5.6 GB VRAM, structured plans
     "conversation":  os.getenv("MODEL_CONVERSATION",   "smallville-actor"),  # Fine-tuned 2B character actor
-    "reflection":    os.getenv("MODEL_REFLECTION",     "qwen3:30b-a3b"),   # MoE: 30B quality, ~3B VRAM
-    "importance":    os.getenv("MODEL_IMPORTANCE",     "gemma3:1b"),       # Fast, called hundreds of times
-    "default":       os.getenv("OLLAMA_MODEL",         "qwen2.5:3b"),      # Fallback for anything else
+    "reflection":    os.getenv("MODEL_REFLECTION",     "qwen3.5:9b-sim"),   # 9B partial offload: rich reflections
+    "importance":    os.getenv("MODEL_IMPORTANCE",     "gemma3:1b"),        # Fast, called hundreds of times
+    "default":       os.getenv("OLLAMA_MODEL",         "qwen2.5:3b"),       # Fallback for anything else
 }
 
 # Legacy compat
@@ -60,6 +60,13 @@ CONVERSATION_RELEVANCE_THRESHOLD = 0.5  # Minimum relevance to initiate
 AGENT_BATCH_SIZE = 6             # Concurrent agent processing
 LLM_SEMAPHORE_LIMIT = 2          # Max concurrent Ollama requests
 CONVERSATION_CHECK_INTERVAL = 3  # Only check for new conversations every N ticks
+PLANNING_CONCURRENCY = 3         # Max concurrent agent planning calls (Ollama bottleneck)
+
+# Sleep / Curfew Configuration
+SLEEP_HARD_START = 23   # 11pm — no new conversations after this hour
+SLEEP_HARD_END   = 5    # 5am  — conversations resume after this hour
+SLEEP_SOFT_START = 21   # 9pm — start winding down
+SLEEP_KEYWORDS = ["sleep", "bed", "rest", "bedroom", "nap", "asleep"]
 
 # Rule-based importance keywords (avoids LLM call per observation)
 ROUTINE_IMPORTANCE_KEYWORDS = {
@@ -104,6 +111,26 @@ START_TIME = "06:00"
 LOG_LEVEL = "INFO"
 LOG_FILE = "simulation.log"
 
+def is_hard_sleep_time(sim_hour: int) -> bool:
+    """True during hard sleep window — no new conversations allowed."""
+    if SLEEP_HARD_START > SLEEP_HARD_END:  # spans midnight
+        return sim_hour >= SLEEP_HARD_START or sim_hour < SLEEP_HARD_END
+    return SLEEP_HARD_START <= sim_hour < SLEEP_HARD_END
+
+def conversation_sleep_weight(sim_hour: int) -> float:
+    """
+    Returns a multiplier (0.0–1.0) for conversation probability.
+    1.0 = normal, 0.0 = no conversations.
+    Drops linearly from SLEEP_SOFT_START to SLEEP_HARD_START.
+    """
+    if is_hard_sleep_time(sim_hour):
+        return 0.0
+    if sim_hour < SLEEP_SOFT_START:
+        return 1.0
+    window = SLEEP_HARD_START - SLEEP_SOFT_START
+    elapsed = sim_hour - SLEEP_SOFT_START
+    return max(0.0, 1.0 - (elapsed / window))
+
 def get_config() -> Dict[str, Any]:
     """Get all configuration as a dictionary."""
     return {
@@ -118,5 +145,8 @@ def get_config() -> Dict[str, Any]:
         "num_agents": DEFAULT_NUM_AGENTS,
         "locations": SMALLVILLE_LOCATIONS,
         "start_date": START_DATE,
-        "start_time": START_TIME
+        "start_time": START_TIME,
+        "sleep_hard_start": SLEEP_HARD_START,
+        "sleep_hard_end": SLEEP_HARD_END,
+        "sleep_soft_start": SLEEP_SOFT_START,
     }
