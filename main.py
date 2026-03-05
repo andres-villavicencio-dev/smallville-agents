@@ -9,6 +9,8 @@ import logging.handlers
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import sys
+from pathlib import Path
+from config_validator import ConfigValidator
 import os
 
 from agent import GenerativeAgent
@@ -23,6 +25,20 @@ from config import (
     is_hard_sleep_time, conversation_sleep_weight, SLEEP_KEYWORDS
 )
 from llm import set_llm_status_callback
+
+# Run config validation when starting simulation
+try:
+    print("=" * 60)
+    print("Running configuration validation...")
+    validator = ConfigValidator()
+    validator.run_all_checks(quiet=True)
+
+    if validator.errors:
+        print("Warning: Some configuration issues detected")
+        # log to startup errors
+except Exception as e:
+    print(f"Configuration validation failed: {e}")
+    # Continue anyway
 
 # Setup logging
 logging.basicConfig(
