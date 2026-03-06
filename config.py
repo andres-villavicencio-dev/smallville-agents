@@ -1,6 +1,6 @@
 """Configuration settings for the Generative Agents simulation."""
 import os
-from typing import Dict, Any
+from typing import Any, Dict
 
 # Model Configuration - Per-task routing for optimal quality/speed
 OLLAMA_BASE_URL = "http://localhost:11434"
@@ -131,7 +131,7 @@ def conversation_sleep_weight(sim_hour: int) -> float:
     elapsed = sim_hour - SLEEP_SOFT_START
     return max(0.0, 1.0 - (elapsed / window))
 
-def get_config() -> Dict[str, Any]:
+def get_config() -> dict[str, Any]:
     """Get all configuration as a dictionary."""
     return {
         "model": OLLAMA_MODEL,

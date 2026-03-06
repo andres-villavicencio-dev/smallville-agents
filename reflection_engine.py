@@ -5,12 +5,12 @@ the differences between single-model and committee-of-experts modes.
 """
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
-from memory import Memory
-from llm import get_llm_client
-from config import IMPORTANCE_THRESHOLD, MAX_RECENT_MEMORIES, IMPORTANCE_THRESHOLD
 import config as cfg
+from config import IMPORTANCE_THRESHOLD, MAX_RECENT_MEMORIES
+from llm import get_llm_client
+from memory import Memory
 
 if TYPE_CHECKING:
     from agent import GenerativeAgent
@@ -22,7 +22,7 @@ class ReflectionStrategy(ABC):
     """Abstract base class for reflection strategies."""
 
     @abstractmethod
-    async def reflect(self, agent: 'GenerativeAgent') -> List[Memory]:
+    async def reflect(self, agent: 'GenerativeAgent') -> list[Memory]:
         """Perform reflection and return reflection memories.
 
         Args:
@@ -37,7 +37,7 @@ class ReflectionStrategy(ABC):
 class SingleModelReflection(ReflectionStrategy):
     """Reflection using a single LLM model."""
 
-    async def reflect(self, agent: 'GenerativeAgent') -> List[Memory]:
+    async def reflect(self, agent: 'GenerativeAgent') -> list[Memory]:
         """Perform reflection using single model approach.
 
         Steps:
@@ -103,7 +103,7 @@ class SingleModelReflection(ReflectionStrategy):
 class CommitteeReflection(ReflectionStrategy):
     """Reflection using committee of expert models."""
 
-    async def reflect(self, agent: 'GenerativeAgent') -> List[Memory]:
+    async def reflect(self, agent: 'GenerativeAgent') -> list[Memory]:
         """Perform reflection using committee approach.
 
         Uses Memory + Emotional + Judge pipeline for synthesis.
@@ -145,7 +145,7 @@ class CommitteeReflection(ReflectionStrategy):
 class ReflectionEngine:
     """Factory for getting the appropriate reflection strategy."""
 
-    _instance: Optional[ReflectionStrategy] = None
+    _instance: ReflectionStrategy | None = None
 
     @classmethod
     def get_engine(cls, use_committee: bool = None) -> ReflectionStrategy:
@@ -329,6 +329,7 @@ class CommitteePlanning(PlanningStrategy):
         times mentioned. Returns them as fixed commitment strings for the planner.
         """
         import re
+
         from config import SMALLVILLE_LOCATIONS
         
         commitments = []
@@ -448,8 +449,8 @@ class SingleModelConversation(ConversationStrategy):
     async def generate_response(self, speaker: str, other_agent: str,
                                conversation, memory_stream) -> str:
         """Generate conversation response (single model)."""
-        from prompts import CONVERSATION_RESPONSE_PROMPT
         from personas import format_agent_description, get_agent_persona
+        from prompts import CONVERSATION_RESPONSE_PROMPT
 
         # Fix 5: Broaden query to include events and parties
         # Turn-aware query: use last utterance to retrieve contextually fresh memories

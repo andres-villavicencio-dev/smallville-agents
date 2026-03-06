@@ -9,16 +9,17 @@ Isabella party tracking, reflection/skill counts.
 Usage:
     python3 telegram_broadcaster.py [--dry-run]
 """
+import argparse
+import json
 import os
 import re
 import sys
 import time
-import json
-import argparse
-import requests
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from collections import defaultdict
+
+import requests
 
 # ── Config ──────────────────────────────────────────────────────────────────
 TELEGRAM_GROUP = os.getenv("SMALLVILLE_TG_GROUP", "-5210265423")
@@ -297,7 +298,7 @@ def save_state(offset: int):
 
 def tail_and_broadcast(dry_run: bool = False):
     """Main loop: tail log, collect events, send periodic digests."""
-    print(f"📡 Smallville Live Broadcaster")
+    print("📡 Smallville Live Broadcaster")
     print(f"   Log: {LOG_FILE}")
     print(f"   Group: {TELEGRAM_GROUP}")
     print(f"   Digest every: {DIGEST_INTERVAL}s")
@@ -327,7 +328,7 @@ def tail_and_broadcast(dry_run: bool = False):
 
     while True:
         try:
-            with open(LOG_FILE, "r") as f:
+            with open(LOG_FILE) as f:
                 f.seek(offset)
                 new_lines = f.readlines()
                 offset = f.tell()

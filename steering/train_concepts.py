@@ -10,11 +10,11 @@ Usage:
     python train_concepts.py --all
 """
 
-import sys
-import os
-import json
 import argparse
+import json
 import logging
+import os
+import sys
 from pathlib import Path
 
 # Setup
@@ -1318,8 +1318,9 @@ def generate_formatted_prompts(concept_name: str, model_tokenizer=None):
 
 def train_concept(concept_name: str, model=None, tokenizer=None):
     """Train RFM directions for a single concept and save to disk."""
-    from neural_controllers import NeuralController
     import torch
+
+    from neural_controllers import NeuralController
 
     logger.info(f"Training concept: {concept_name}")
 
@@ -1358,7 +1359,7 @@ def train_concept(concept_name: str, model=None, tokenizer=None):
 def train_all_concepts():
     """Train all concept directions. Requires GPU and loaded model."""
     import torch
-    from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
     logger.info(f"Loading {MODEL_ID} in 4-bit for training...")
     quantization_config = BitsAndBytesConfig(

@@ -4,16 +4,17 @@ import logging
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
-from typing import Dict, List, Optional, Any
-from rich.console import Console, Group
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-from rich.layout import Layout
-from rich.live import Live
+from typing import Any, Dict, List, Optional
+
 from rich.align import Align
 from rich.columns import Columns
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from rich.console import Console, Group
+from rich.layout import Layout
+from rich.live import Live
+from rich.panel import Panel
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
+from rich.table import Table
+from rich.text import Text
 
 
 class SimulationDisplay:
@@ -48,7 +49,7 @@ class SimulationDisplay:
         self.current_llm_task = ""
         self.current_llm_model = ""
         self.llm_call_count = 0
-        self.llm_calls_per_model: Dict[str, int] = {}
+        self.llm_calls_per_model: dict[str, int] = {}
         
         # Stats
         self.total_memories = 0
@@ -132,12 +133,12 @@ class SimulationDisplay:
         """Set whether committee mode is active."""
         self.committee_mode = enabled
     
-    def update_agent_activities(self, activities: Dict[str, str]):
+    def update_agent_activities(self, activities: dict[str, str]):
         """Update agent activities."""
         self.agent_activities = activities.copy()
         self.agent_count = len(activities)
     
-    def add_event(self, event: str, timestamp: Optional[datetime] = None):
+    def add_event(self, event: str, timestamp: datetime | None = None):
         """Add an event to the recent events list."""
         if timestamp is None:
             timestamp = self.simulation_time
@@ -146,11 +147,11 @@ class SimulationDisplay:
         if len(self.recent_events) > 30:
             self.recent_events = self.recent_events[-30:]
     
-    def update_location_populations(self, populations: Dict[str, List[str]]):
+    def update_location_populations(self, populations: dict[str, list[str]]):
         """Update location population data."""
         self.location_populations = populations.copy()
     
-    def update_conversations(self, conversation_summaries: List[str]):
+    def update_conversations(self, conversation_summaries: list[str]):
         """Update active conversations."""
         self.conversation_summaries = conversation_summaries.copy()
     
@@ -173,7 +174,7 @@ class SimulationDisplay:
                 self.llm_calls_per_model[model] = self.llm_calls_per_model.get(model, 0) + 1
             logger.debug(f"LLM status: {agent} → {task} [{model}] (call #{self.llm_call_count})")
     
-    def update_stats(self, stats: Dict[str, Any]):
+    def update_stats(self, stats: dict[str, Any]):
         """Update simulation statistics."""
         self.total_memories = stats.get("total_memories", self.total_memories)
         self.total_conversations = stats.get("total_conversations", self.total_conversations)
@@ -435,8 +436,8 @@ class SimulationDisplay:
     def print_info(self, info_msg: str):
         self.console.print(f"[cyan]Info: {info_msg}[/cyan]")
     
-    def show_agent_details(self, agent_name: str, memories: List[str], 
-                          current_plan: str, reflections: List[str]):
+    def show_agent_details(self, agent_name: str, memories: list[str], 
+                          current_plan: str, reflections: list[str]):
         """Show detailed information about an agent."""
         self.console.print(f"\n[bold cyan]🤖 {agent_name} Details[/bold cyan]")
         self.console.print(f"[yellow]Current Plan:[/yellow] {current_plan}")
@@ -450,7 +451,7 @@ class SimulationDisplay:
                 self.console.print(f"  {i}. {reflection}")
         self.console.print()
     
-    def show_simulation_stats(self, stats: Dict[str, Any]):
+    def show_simulation_stats(self, stats: dict[str, Any]):
         """Show simulation statistics."""
         self.console.print("\n[bold cyan]📊 Simulation Statistics[/bold cyan]")
         table = Table(show_header=False, box=None)

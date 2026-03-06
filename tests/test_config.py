@@ -1,14 +1,16 @@
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
+
 from config import (
-    get_config,
+    IMPORTANCE_THRESHOLD,
     MEMORY_RETRIEVAL_WEIGHTS,
-    SMALLVILLE_LOCATIONS,
     RECENCY_DECAY_FACTOR,
-    IMPORTANCE_THRESHOLD
+    SMALLVILLE_LOCATIONS,
+    get_config,
 )
 
 

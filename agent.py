@@ -1,25 +1,27 @@
 """Generative Agent implementation with memory, reflection, and planning."""
-import logging
 import asyncio
 import json
+import logging
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple, Any
-from dataclasses import dataclass, asdict
-from memory import Memory, MemoryStream
-from skillbank import SkillBank, distill_reflection_skill
+from typing import Any, Dict, List, Optional, Tuple
+
+from config import ACTION_DURATION_RANGE, IMPORTANCE_THRESHOLD, MAX_RECENT_MEMORIES, USE_QDRANT
 from llm import get_llm_client
-from personas import get_agent_persona, format_agent_description
-from config import IMPORTANCE_THRESHOLD, MAX_RECENT_MEMORIES, ACTION_DURATION_RANGE, USE_QDRANT
+from memory import Memory, MemoryStream
+from personas import format_agent_description, get_agent_persona
+from skillbank import SkillBank, distill_reflection_skill
+
 if USE_QDRANT:
     from memory_qdrant import QdrantMemoryStream
 import config as cfg
 from prompts import (
     DAILY_PLANNING_PROMPT,
     IMPORTANCE_SCORING_PROMPT,
+    REFLECTION_GENERATION_PROMPT,
     REFLECTION_QUESTIONS_PROMPT,
-    REFLECTION_GENERATION_PROMPT
 )
-from reflection_engine import ReflectionEngine, PlanningEngine
+from reflection_engine import PlanningEngine, ReflectionEngine
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,7 @@ class PlanItem:
     def end_time(self) -> datetime:
         return self.start_time + timedelta(minutes=self.duration_minutes)
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "description": self.description,
             "location": self.location,
@@ -45,7 +47,7 @@ class PlanItem:
         }
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'PlanItem':
+    def from_dict(cls, data: dict[str, Any]) -> 'PlanItem':
         return cls(
             description=data["description"],
             location=data["location"],
@@ -62,8 +64,8 @@ class GenerativeAgent:
         self.persona = get_agent_persona(name)
         self.memory_stream = QdrantMemoryStream(name) if USE_QDRANT else MemoryStream(name, db_path)
         self.skill_bank = SkillBank(name, db_path)
-        self.daily_plan: List[PlanItem] = []
-        self.current_plan_item: Optional[PlanItem] = None
+        self.daily_plan: list[PlanItem] = []
+        self.current_plan_item: PlanItem | None = None
         self.current_location = ""
         self.current_sub_area = ""
         self.last_reflection_time = datetime.now()
@@ -215,7 +217,7 @@ class GenerativeAgent:
         except Exception as e:
             logger.error(f"plan_followthrough_reflection failed for {self.name}: {e}")
 
-    async def reflect(self) -> List[Memory]:
+    async def reflect(self) -> list[Memory]:
         """Perform reflection process as described in the paper.
 
         Reflection is the agent's ability to synthesize recent observations into
@@ -256,7 +258,7 @@ class GenerativeAgent:
             logger.error(f"Error during reflection for {self.name}: {e}")
             return []
     
-    async def plan_daily_schedule(self, date: datetime) -> List[PlanItem]:
+    async def plan_daily_schedule(self, date: datetime) -> list[PlanItem]:
         """Generate a daily plan using the agent's persona and memories.
 
         Uses the planning engine (single-model or committee) to generate a daily
@@ -341,7 +343,7 @@ class GenerativeAgent:
             self.daily_plan = fallback
             return fallback
     
-    def _generate_fallback_plan(self, date: datetime) -> List[PlanItem]:
+    def _generate_fallback_plan(self, date: datetime) -> list[PlanItem]:
         """Generate a basic persona-driven plan when LLM is unavailable.
         
         Uses the agent's persona data (home, work, lunch location) to create
@@ -431,7 +433,7 @@ class GenerativeAgent:
         logger.info(f"{self.name} using fallback plan ({len(base_plan)} items, {len(event_items)} events)")
         return base_plan
 
-    async def _parse_daily_plan(self, plan_text: str, date: datetime) -> List[PlanItem]:
+    async def _parse_daily_plan(self, plan_text: str, date: datetime) -> list[PlanItem]:
         """Parse LLM-generated daily plan text into PlanItem objects.
 
         Parses lines from the LLM response, extracting times, inferring locations
@@ -490,7 +492,7 @@ class GenerativeAgent:
         
         return plan_items
     
-    def _extract_time_from_text(self, text: str) -> Optional[Tuple[int, int]]:
+    def _extract_time_from_text(self, text: str) -> tuple[int, int] | None:
         """Extract time from text (e.g., '8:30 am', '2 pm', '10:00')."""
         import re
         
@@ -588,7 +590,7 @@ class GenerativeAgent:
         # Default
         return 60  # 1 hour
     
-    async def _decompose_plan_item(self, plan_item: PlanItem) -> List[PlanItem]:
+    async def _decompose_plan_item(self, plan_item: PlanItem) -> list[PlanItem]:
         """Decompose a broad plan item into specific actions."""
         if plan_item.duration_minutes <= 30:
             return [plan_item]
@@ -625,7 +627,7 @@ class GenerativeAgent:
             logger.error(f"Error decomposing plan item: {e}")
             return [plan_item]
     
-    def get_current_plan_item(self, current_time: datetime) -> Optional[PlanItem]:
+    def get_current_plan_item(self, current_time: datetime) -> PlanItem | None:
         """Get the plan item that should be active at the current time."""
         for item in self.daily_plan:
             if (item.start_time <= current_time <= item.end_time() and 
@@ -633,7 +635,7 @@ class GenerativeAgent:
                 return item
         return None
     
-    def update_current_activity(self, current_time: datetime) -> Optional[str]:
+    def update_current_activity(self, current_time: datetime) -> str | None:
         """Update current activity based on the plan and return activity description."""
         current_item = self.get_current_plan_item(current_time)
         
@@ -702,7 +704,7 @@ class GenerativeAgent:
         
         try:
             if cfg.USE_COMMITTEE:
-                from committee import get_committee, COMMITTEE_BACKEND
+                from committee import COMMITTEE_BACKEND, get_committee
                 committee = get_committee()
                 if COMMITTEE_BACKEND == "steering":
                     planning_thought = await committee.consult("decide_action", planning_prompt, self.name)
@@ -785,7 +787,7 @@ class GenerativeAgent:
         
         try:
             if cfg.USE_COMMITTEE:
-                from committee import get_committee, COMMITTEE_BACKEND
+                from committee import COMMITTEE_BACKEND, get_committee
                 committee = get_committee()
                 if COMMITTEE_BACKEND == "steering":
                     response = await committee.consult("decide_action", replan_prompt, self.name)
@@ -826,7 +828,7 @@ class GenerativeAgent:
             logger.error(f"Error in react_to_conversation replan for {self.name}: {e}")
             return False
     
-    def _parse_replan_response(self, response: str, current_time: datetime) -> Optional[PlanItem]:
+    def _parse_replan_response(self, response: str, current_time: datetime) -> PlanItem | None:
         """Parse a replan response like '17:00 - Attend party at Hobbs Cafe'."""
         import re
         # Match pattern: HH:MM - description at location
@@ -907,7 +909,7 @@ class GenerativeAgent:
         self.current_location = location
         self.current_sub_area = sub_area
     
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         """Get agent state for saving/loading."""
         return {
             "name": self.name,
@@ -922,7 +924,7 @@ class GenerativeAgent:
             "mood_valence": self.mood_valence,
         }
     
-    def load_state(self, state: Dict[str, Any]):
+    def load_state(self, state: dict[str, Any]):
         """Load agent state."""
         raw_location = state.get("current_location", "")
         # Snap loaded location to a valid one (fixes "Local restaurant", "Various locations" etc.)

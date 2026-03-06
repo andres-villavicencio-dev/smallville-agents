@@ -135,7 +135,8 @@ def main():
 
     # Initialize both memory systems
     print("\nInitializing TF-IDF memory stream...")
-    import tempfile, os
+    import os
+    import tempfile
     tmp_db = tempfile.mktemp(suffix=".db")
     tfidf_stream = MemoryStream(agent_name="TestAgent", db_path=tmp_db)
     tfidf_stream._init_database()  # create schema

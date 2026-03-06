@@ -6,8 +6,8 @@ This module provides utilities for:
 - Inferring locations and durations from activity descriptions
 - Decomposing broad activities into specific actions
 """
-import re
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
@@ -107,7 +107,7 @@ class PlanParser:
         self.default_home = default_home
         self.default_work = default_work
 
-    def parse(self, plan_text: str, date: datetime) -> List:
+    def parse(self, plan_text: str, date: datetime) -> list:
         """Parse LLM-generated daily plan into PlanItem objects.
 
         Args:
@@ -194,7 +194,7 @@ class PlanParser:
         return snap_to_valid_location(activity, default=self.default_work)
 
 
-def extract_time_from_text(text: str) -> Optional[Tuple[int, int]]:
+def extract_time_from_text(text: str) -> tuple[int, int] | None:
     """Extract time from text (e.g., '8:30 am', '2 pm').
 
     Args:
@@ -263,7 +263,7 @@ def infer_duration(activity: str) -> int:
     return 60  # 1 hour
 
 
-async def decompose_plan_item(agent_name: str, plan_item, duration_minutes: int) -> List:
+async def decompose_plan_item(agent_name: str, plan_item, duration_minutes: int) -> list:
     """Decompose a broad plan item into specific actions.
 
     Args:

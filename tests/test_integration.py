@@ -1,13 +1,17 @@
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import pytest
 from datetime import datetime, timedelta
+
+import pytest
+
 from agent import GenerativeAgent, PlanItem
-from environment import SmallvilleEnvironment
 from conversation import ConversationManager
+from environment import SmallvilleEnvironment
 from memory import Memory, MemoryStream
-from personas import select_agent_subset, get_agent_persona
+from personas import get_agent_persona, select_agent_subset
 
 
 def test_agent_creation_loads_persona(tmp_db_path):

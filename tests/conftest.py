@@ -1,16 +1,17 @@
 """Shared fixtures for the generative-agents test suite."""
-import sys
 import os
-import pytest
+import sys
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Add project root to path so imports work
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from memory import Memory, MemoryStream
-from environment import SmallvilleEnvironment
 from conversation import Conversation, ConversationManager
+from environment import SmallvilleEnvironment
+from memory import Memory, MemoryStream
 
 
 @pytest.fixture

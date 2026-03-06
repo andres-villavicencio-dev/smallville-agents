@@ -7,12 +7,13 @@ frequently interact to maximize distinguishability.
 KittenTTS endpoint: http://192.168.1.70:8377/tts
 """
 
-import hashlib
 import asyncio
-import aiohttp
+import hashlib
 import logging
 import os
 from pathlib import Path
+
+import aiohttp
 
 logger = logging.getLogger(__name__)
 

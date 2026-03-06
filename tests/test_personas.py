@@ -1,16 +1,18 @@
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
+
 from personas import (
     AGENT_PERSONAS,
-    get_all_agent_names,
+    format_agent_description,
     get_agent_persona,
-    select_agent_subset,
-    get_agents_by_location,
     get_agent_relationships,
-    format_agent_description
+    get_agents_by_location,
+    get_all_agent_names,
+    select_agent_subset,
 )
 
 

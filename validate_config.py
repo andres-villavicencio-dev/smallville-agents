@@ -1,8 +1,10 @@
 """Command-line interface for config validation"""
+import argparse
 import sys
 from pathlib import Path
-import argparse
+
 from config_validator import ConfigValidator
+
 
 def main():
     parser = argparse.ArgumentParser(description="Validate SmallvilleSimulation configuration")

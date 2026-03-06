@@ -1,14 +1,16 @@
 """Memory stream implementation for generative agents."""
-import sqlite3
 import json
-import math
 import logging
+import math
+import sqlite3
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple, Any
-from dataclasses import dataclass, asdict
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
 from config import MEMORY_RETRIEVAL_WEIGHTS, RECENCY_DECAY_FACTOR
 
 logger = logging.getLogger(__name__)
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Memory:
     """A single memory object."""
-    id: Optional[int] = None
+    id: int | None = None
     agent_name: str = ""
     description: str = ""
     memory_type: str = "observation"  # observation, reflection, plan
@@ -24,7 +26,7 @@ class Memory:
     creation_timestamp: datetime = None
     last_access_timestamp: datetime = None
     location: str = ""
-    source_memory_ids: List[int] = None  # For reflections
+    source_memory_ids: list[int] = None  # For reflections
     
     def __post_init__(self):
         if self.creation_timestamp is None:
@@ -34,7 +36,7 @@ class Memory:
         if self.source_memory_ids is None:
             self.source_memory_ids = []
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         data = asdict(self)
         data['creation_timestamp'] = self.creation_timestamp.isoformat()
@@ -42,7 +44,7 @@ class Memory:
         return data
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Memory':
+    def from_dict(cls, data: dict[str, Any]) -> 'Memory':
         """Create from dictionary."""
         data['creation_timestamp'] = datetime.fromisoformat(data['creation_timestamp'])
         data['last_access_timestamp'] = datetime.fromisoformat(data['last_access_timestamp'])
@@ -173,8 +175,8 @@ class MemoryStream:
             logger.error(f"Error adding memory: {e}")
             return -1
     
-    def get_memories(self, limit: Optional[int] = None, 
-                    memory_type: Optional[str] = None) -> List[Memory]:
+    def get_memories(self, limit: int | None = None, 
+                    memory_type: str | None = None) -> list[Memory]:
         """Get memories for the agent."""
         try:
             with sqlite3.connect(self.db_path, timeout=30) as conn:
@@ -243,7 +245,7 @@ class MemoryStream:
         return (memory.importance_score - 1) / 9.0  # 1-10 scale to 0-1
     
     def retrieve_memories(self, query: str, top_k: int = 10,
-                         current_time: Optional[datetime] = None) -> List[Tuple[Memory, float]]:
+                         current_time: datetime | None = None) -> list[tuple[Memory, float]]:
         """Retrieve top-k most relevant memories with combined scoring."""
         if current_time is None:
             current_time = datetime.now()
@@ -308,7 +310,7 @@ class MemoryStream:
         except Exception as e:
             logger.error(f"Error updating memory access time: {e}")
 
-    def _batch_update_memory_access_times(self, memory_ids: List[int], access_time: datetime):
+    def _batch_update_memory_access_times(self, memory_ids: list[int], access_time: datetime):
         """Batch update last access times for multiple memories (single query)."""
         if not memory_ids:
             return
@@ -324,7 +326,7 @@ class MemoryStream:
         except Exception as e:
             logger.error(f"Error batch updating memory access times: {e}")
     
-    def get_importance_since(self, since: datetime = None, exclude_types: List[str] = None) -> int:
+    def get_importance_since(self, since: datetime = None, exclude_types: list[str] = None) -> int:
         """Get sum of importance scores for memories created since a given time."""
         if since is None:
             since = datetime.now() - timedelta(hours=24)
@@ -351,7 +353,7 @@ class MemoryStream:
             logger.error(f"Error calculating importance since {since}: {e}")
             return 0
 
-    def search_memories_fts(self, query: str, limit: int = 20) -> List[Memory]:
+    def search_memories_fts(self, query: str, limit: int = 20) -> list[Memory]:
         """Search memories using FTS5 full-text search."""
         try:
             with sqlite3.connect(self.db_path, timeout=30) as conn:

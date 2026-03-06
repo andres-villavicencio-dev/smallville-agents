@@ -5,13 +5,14 @@ Can also produce a merged conversation audio clip for the Telegram broadcaster.
 """
 
 import asyncio
-import aiohttp
 import logging
 import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
+
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +53,9 @@ async def generate_turn_audio(speaker: str, text: str, output_path: str,
 
 
 async def generate_conversation_audio(
-    turns: List[Tuple[str, str]],  # [(speaker, message), ...]
+    turns: list[tuple[str, str]],  # [(speaker, message), ...]
     conversation_id: str,
-) -> Optional[str]:
+) -> str | None:
     """Generate audio for an entire conversation, returning path to merged OGG.
     
     Each turn is synthesized separately (with the agent's voice), then
@@ -125,7 +126,7 @@ async def generate_conversation_audio(
         return None
 
 
-async def voice_conversation_end(conversation) -> Optional[str]:
+async def voice_conversation_end(conversation) -> str | None:
     """Hook called when a conversation ends. Returns path to OGG if successful."""
     if not ENABLED:
         return None

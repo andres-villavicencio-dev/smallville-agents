@@ -1,22 +1,24 @@
 """LLM interface for Ollama with GPU queue support and per-task model routing."""
 import asyncio
-import sys
 import json
 import logging
+import sys
+from typing import Any, Dict, List, Optional
+
 import aiohttp
-from typing import Optional, Dict, Any, List
+
 from config import MODELS, OLLAMA_BASE_URL
 from prompts import (
+    DAILY_PLANNING_PROMPT,
     IMPORTANCE_SCORING_PROMPT,
-    REFLECTION_QUESTIONS_PROMPT,
     REFLECTION_GENERATION_PROMPT,
-    DAILY_PLANNING_PROMPT
+    REFLECTION_QUESTIONS_PROMPT,
 )
 
 # GPU Queue integration
 try:
     sys.path.insert(0, "/home/andus/.openclaw/workspace/gpu-queue")
-    from queue_manager import ollama_query, gpu_queue
+    from queue_manager import gpu_queue, ollama_query
     GPU_QUEUE_AVAILABLE = True
 except ImportError:
     GPU_QUEUE_AVAILABLE = False
@@ -55,7 +57,7 @@ class OllamaClient:
         self.use_gpu_queue = use_gpu_queue and GPU_QUEUE_AVAILABLE
         logger.info(f"Model routing: {', '.join(f'{k}={v}' for k, v in MODELS.items())}")
         
-    async def generate(self, prompt: str, system_prompt: Optional[str] = None, 
+    async def generate(self, prompt: str, system_prompt: str | None = None, 
                       temperature: float = 0.7, max_tokens: int = 512,
                       task: str = "default", agent_name: str = "") -> str:
         """Generate text using the task-appropriate model."""
@@ -70,7 +72,7 @@ class OllamaClient:
             logger.error(f"Error generating text ({task}/{model}): {e}")
             return ""
     
-    async def _generate_with_queue(self, prompt: str, system_prompt: Optional[str],
+    async def _generate_with_queue(self, prompt: str, system_prompt: str | None,
                                   temperature: float, max_tokens: int, model: str) -> str:
         """Generate using GPU queue."""
         try:
@@ -84,7 +86,7 @@ class OllamaClient:
             logger.error(f"GPU queue generation failed ({model}): {e}")
             return await self._generate_direct(prompt, system_prompt, temperature, max_tokens, model)
     
-    async def _generate_direct(self, prompt: str, system_prompt: Optional[str],
+    async def _generate_direct(self, prompt: str, system_prompt: str | None,
                               temperature: float, max_tokens: int, model: str) -> str:
         """Generate using direct Ollama API (async). Retries on connection failures."""
         messages = []
@@ -117,7 +119,7 @@ class OllamaClient:
                         result = await resp.json()
                         return result["message"]["content"].strip()
                 
-            except (aiohttp.ClientConnectionError, asyncio.TimeoutError) as e:
+            except (TimeoutError, aiohttp.ClientConnectionError) as e:
                 delay = min(base_delay * (attempt + 1), 120)
                 logger.warning(
                     f"Ollama unavailable ({model}, attempt {attempt + 1}/{max_retries}), "
@@ -143,7 +145,7 @@ class OllamaClient:
             logger.warning(f"Failed to parse importance score: {response}")
             return 5  # Default moderate importance
     
-    async def generate_reflection_questions(self, recent_memories: List[str], agent_name: str = "") -> List[str]:
+    async def generate_reflection_questions(self, recent_memories: list[str], agent_name: str = "") -> list[str]:
         """Generate 3 salient high-level questions from recent memories."""
         memories_text = "\n".join(f"- {memory}" for memory in recent_memories)
 
@@ -162,7 +164,7 @@ class OllamaClient:
         
         return questions[:3]  # Ensure only 3 questions
     
-    async def generate_reflection(self, question: str, relevant_memories: List[str], agent_name: str = "") -> str:
+    async def generate_reflection(self, question: str, relevant_memories: list[str], agent_name: str = "") -> str:
         """Generate a reflection based on a question and relevant memories."""
         memories_text = "\n".join(f"- {memory}" for memory in relevant_memories)
 
@@ -190,7 +192,7 @@ class OllamaClient:
         return response
     
     async def decompose_plan_item(self, agent_name: str, plan_item: str, 
-                                 duration_minutes: int) -> List[str]:
+                                 duration_minutes: int) -> list[str]:
         """Decompose a plan item into 5-15 minute actions."""
         prompt = f"""Break down this {duration_minutes}-minute activity for {agent_name} into specific 5-15 minute actions:
 

@@ -1,30 +1,37 @@
 """Main simulation loop for Generative Agents."""
-import asyncio
 import argparse
-import random
-import signal
+import asyncio
 import json
 import logging
 import logging.handlers
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
-import sys
-from pathlib import Path
-from config_validator import ConfigValidator
 import os
+import random
+import signal
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional
 
-from agent import GenerativeAgent
-from environment import SmallvilleEnvironment
-from conversation import ConversationManager
-from display import SimulationDisplay, ProgressDisplay
-from personas import get_all_agent_names, get_agents_by_location, select_agent_subset
 import config as cfg
+from agent import GenerativeAgent
 from config import (
-    DEFAULT_SIMULATION_SPEED, TICK_DURATION_SECONDS, DEFAULT_SIM_DAYS, DEFAULT_NUM_AGENTS,
-    START_DATE, START_TIME, get_config,
-    is_hard_sleep_time, conversation_sleep_weight, SLEEP_KEYWORDS
+    DEFAULT_NUM_AGENTS,
+    DEFAULT_SIM_DAYS,
+    DEFAULT_SIMULATION_SPEED,
+    SLEEP_KEYWORDS,
+    START_DATE,
+    START_TIME,
+    TICK_DURATION_SECONDS,
+    conversation_sleep_weight,
+    get_config,
+    is_hard_sleep_time,
 )
+from config_validator import ConfigValidator
+from conversation import ConversationManager
+from display import ProgressDisplay, SimulationDisplay
+from environment import SmallvilleEnvironment
 from llm import set_llm_status_callback
+from personas import get_agents_by_location, get_all_agent_names, select_agent_subset
 
 # Run config validation when starting simulation
 try:
@@ -56,7 +63,7 @@ class SmallvilleSimulation:
     """Main simulation controller."""
     
     def __init__(self, use_gpu_queue: bool = True, speed: int = DEFAULT_SIMULATION_SPEED, num_agents: int = DEFAULT_NUM_AGENTS):
-        self.agents: Dict[str, GenerativeAgent] = {}
+        self.agents: dict[str, GenerativeAgent] = {}
         self.environment = SmallvilleEnvironment()
         self.conversation_manager = ConversationManager()
         self.display = SimulationDisplay()
@@ -97,7 +104,7 @@ class SmallvilleSimulation:
             date_str = f"{START_DATE} {START_TIME}"
             return datetime.strptime(date_str, "%Y-%m-%d %H:%M")
         except ValueError:
-            logger.warning(f"Invalid start time format, using current time")
+            logger.warning("Invalid start time format, using current time")
             return datetime.now()
     
     async def _run_planning(self, agents, log_prefix: str = "") -> None:
@@ -134,7 +141,7 @@ class SmallvilleSimulation:
         logger.info(f"Simulation paused (yield_vram={yield_vram})")
         if yield_vram:
             try:
-                from committee import get_committee, SteeredCommittee
+                from committee import SteeredCommittee, get_committee
                 committee = get_committee()
                 if isinstance(committee, SteeredCommittee) and committee._engine is not None:
                     committee._engine.unload()
@@ -146,7 +153,7 @@ class SmallvilleSimulation:
         """Resume the simulation. Reload steering engine if it was yielded."""
         if getattr(self, '_vram_yielded', False):
             try:
-                from committee import get_committee, SteeredCommittee, ensure_engine_loaded
+                from committee import SteeredCommittee, ensure_engine_loaded, get_committee
                 committee = get_committee()
                 if isinstance(committee, SteeredCommittee):
                     await committee.load_engine()
@@ -337,7 +344,7 @@ class SmallvilleSimulation:
             # Skip tick 0 — agents already planned during initialize()
             # End-of-day follow-through reflection at 22:00 (before midnight re-plan)
             if self.tick_count > 0 and self.current_time.hour == 22 and self.current_time.minute == 0 and self.current_time.second < self.tick_duration:
-                logger.info(f"End-of-day: triggering plan follow-through reflections for all agents")
+                logger.info("End-of-day: triggering plan follow-through reflections for all agents")
                 self.display.add_event("🌙 End of day — agents reflecting on plan follow-through...")
                 for agent in self.agents.values():
                     try:
@@ -481,7 +488,7 @@ class SmallvilleSimulation:
                             # Check if conversation should start
                             context = f"Both at {location_name}"
                             if sleep_weight < 1.0:
-                                context += f" (It is late at night — agents may prefer to sleep)"
+                                context += " (It is late at night — agents may prefer to sleep)"
                             agent1_memory = self.agents[agent1].memory_stream
                             
                             logger.info(f"Checking conversation: {agent1} <-> {agent2} at {location_name} (sleep_weight={sleep_weight:.2f})")
@@ -710,7 +717,7 @@ class SmallvilleSimulation:
     async def load_state(self, state_file: str):
         """Load simulation state from file."""
         try:
-            with open(state_file, 'r') as f:
+            with open(state_file) as f:
                 state = json.load(f)
             
             self.current_time = datetime.fromisoformat(state["current_time"])
@@ -739,7 +746,7 @@ class SmallvilleSimulation:
         """Clean shutdown of the simulation with timeout guard."""
         try:
             await asyncio.wait_for(self._shutdown_inner(), timeout=10.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Shutdown timed out after 10s, forcing exit")
         except Exception as e:
             logger.error(f"Error during shutdown: {e}")

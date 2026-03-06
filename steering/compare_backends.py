@@ -11,10 +11,10 @@ Usage:
 """
 
 import asyncio
-import sys
-import os
-import time
 import json
+import os
+import sys
+import time
 from pathlib import Path
 
 # Add project root to path
@@ -67,7 +67,7 @@ async def test_steering():
     if "committee" in sys.modules:
         del sys.modules["committee"]
 
-    from committee import get_committee, _clean_dialogue, PIPELINES
+    from committee import PIPELINES, _clean_dialogue, get_committee
 
     committee = get_committee()
     print("🧬 STEERING BACKEND (Gemma-2-9B + RFM)")
@@ -130,7 +130,7 @@ async def test_committee():
     if "committee" in sys.modules:
         del sys.modules["committee"]
 
-    from committee import get_committee, _clean_dialogue
+    from committee import _clean_dialogue, get_committee
 
     committee = get_committee()
     print("\n\n🧠 COMMITTEE BACKEND (Ollama multi-model)")
@@ -181,7 +181,9 @@ async def main():
     elif mode == "--both":
         steering_results = await test_steering()
         # Need to unload steering model first to free VRAM
-        import gc, torch
+        import gc
+
+        import torch
         if "committee" in sys.modules:
             c = sys.modules["committee"]
             if hasattr(c, '_committee') and c._committee:

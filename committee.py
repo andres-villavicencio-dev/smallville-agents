@@ -11,8 +11,9 @@ Architecture:
 import asyncio
 import logging
 import os
-from typing import List, Dict, Optional, Any
 from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
 from config import OLLAMA_BASE_URL
 
 logger = logging.getLogger(__name__)
@@ -164,7 +165,7 @@ class Committee:
     def __init__(self, base_url: str = OLLAMA_BASE_URL):
         self.base_url = base_url
         self._call_count = 0
-        self._expert_stats: Dict[str, int] = {}
+        self._expert_stats: dict[str, int] = {}
         self._shutdown_flag = False
 
     def shutdown(self):
@@ -176,7 +177,7 @@ class Committee:
         pipeline_name: str,
         context: str,
         agent_name: str = "",
-        extra: Optional[Dict[str, str]] = None,
+        extra: dict[str, str] | None = None,
     ) -> str:
         """
         Run a named pipeline of experts sequentially.
@@ -195,7 +196,7 @@ class Committee:
             logger.error(f"Unknown pipeline: {pipeline_name}")
             return ""
 
-        expert_outputs: Dict[str, str] = {}
+        expert_outputs: dict[str, str] = {}
         extra = extra or {}
 
         for expert_key in pipeline:
@@ -237,8 +238,8 @@ class Committee:
         expert: ExpertConfig,
         context: str,
         agent_name: str,
-        previous_outputs: Dict[str, str],
-        extra: Dict[str, str],
+        previous_outputs: dict[str, str],
+        extra: dict[str, str],
     ) -> str:
         """Build the prompt for an expert, including previous expert outputs."""
         parts = []
@@ -303,7 +304,7 @@ class Committee:
                             content = _extract_from_thinking(msg, label=f"{expert.name} expert")
                         return content
 
-            except (aiohttp.ClientConnectionError, asyncio.TimeoutError) as e:
+            except (TimeoutError, aiohttp.ClientConnectionError) as e:
                 delay = min(base_delay * (attempt + 1), 120)
                 logger.warning(
                     f"{expert.name} expert: Ollama unavailable (attempt {attempt + 1}/{max_retries}), "
@@ -317,7 +318,7 @@ class Committee:
         logger.error(f"{expert.name} expert: Ollama unavailable after {max_retries} retries, giving up")
         return ""
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get committee usage statistics."""
         return {
             "total_calls": self._call_count,
@@ -377,7 +378,7 @@ class SteeredCommittee(Committee):
         pipeline_name: str,
         context: str,
         agent_name: str = "",
-        extra: Optional[Dict[str, str]] = None,
+        extra: dict[str, str] | None = None,
     ) -> str:
         """Run a pipeline using single steered model instead of expert chain.
 
@@ -442,7 +443,7 @@ class SteeredCommittee(Committee):
         pipeline: list,
         context: str,
         agent_name: str,
-        extra: Dict[str, str],
+        extra: dict[str, str],
     ) -> str:
         """Build a single prompt that captures the combined intent of all pipeline experts."""
         parts = []
@@ -515,7 +516,7 @@ class SteeredCommittee(Committee):
 # ── Convenience Functions ───────────────────────────────────────────────────
 
 # Global committee instance
-_committee: Optional[Committee] = None
+_committee: Committee | None = None
 
 # Backend selection: "committee" (multi-model Ollama) or "steering" (single Gemma-2-9B)
 COMMITTEE_BACKEND = os.getenv("COMMITTEE_BACKEND", "committee")
@@ -555,7 +556,7 @@ async def decide_action(agent_name: str, situation: str, memories: str = "") -> 
     return await committee.consult("decide_action", situation, agent_name, extra)
 
 
-def _load_character_profiles() -> Dict[str, Dict]:
+def _load_character_profiles() -> dict[str, dict]:
     """Load all YAML character profiles once and cache them."""
     profiles_dir = os.path.join(os.path.dirname(__file__), "finetune", "profiles")
     profiles = {}
@@ -577,17 +578,17 @@ def _load_character_profiles() -> Dict[str, Dict]:
     return profiles
 
 
-_CHARACTER_PROFILES: Optional[Dict[str, Dict]] = None
+_CHARACTER_PROFILES: dict[str, dict] | None = None
 
 
-def _get_character_profiles() -> Dict[str, Dict]:
+def _get_character_profiles() -> dict[str, dict]:
     global _CHARACTER_PROFILES
     if _CHARACTER_PROFILES is None:
         _CHARACTER_PROFILES = _load_character_profiles()
     return _CHARACTER_PROFILES
 
 
-def _build_character_system_prompt(agent_name: str, talking_to: str = "someone", mood: str = "neutral") -> Optional[str]:
+def _build_character_system_prompt(agent_name: str, talking_to: str = "someone", mood: str = "neutral") -> str | None:
     """Build the [AGENT:] bracket system prompt the fine-tuned model was trained on."""
     profiles = _get_character_profiles()
     p = profiles.get(agent_name)
@@ -812,10 +813,10 @@ def print_committee_config():
     if COMMITTEE_BACKEND == "steering":
         print("\n🧬 Steered Committee (Single Gemma-2-9B with RFM Personality Vectors):")
         print("─" * 60)
-        print(f"  Model:    google/gemma-2-9b-it (4-bit quantized)")
-        print(f"  Backend:  COMMITTEE_BACKEND=steering")
-        print(f"  Concepts: 27 trained RFM directions")
-        print(f"  Agents:   25 unique personality profiles")
+        print("  Model:    google/gemma-2-9b-it (4-bit quantized)")
+        print("  Backend:  COMMITTEE_BACKEND=steering")
+        print("  Concepts: 27 trained RFM directions")
+        print("  Agents:   25 unique personality profiles")
         print("─" * 60)
         print("\n📋 Pipelines (steered, single-call per pipeline):")
         for name, experts in PIPELINES.items():

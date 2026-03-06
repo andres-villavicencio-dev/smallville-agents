@@ -1,11 +1,15 @@
 """Async tests for ConversationManager with mocked LLM."""
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from conversation import Conversation, ConversationManager
 from memory import MemoryStream
-from conversation import ConversationManager, Conversation
 
 
 @pytest.fixture

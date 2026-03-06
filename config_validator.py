@@ -1,14 +1,15 @@
 # config_validator.py
 """Configuration validator and recovery helper for SmallvilleSimulation"""
 
-import os
 import json
-import yaml
-import sys
-from pathlib import Path
-from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+import os
 import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import yaml
 
 CONFIG_DIR = Path(__file__).parent
 CONFIG_FILE = CONFIG_DIR / "config.json"
@@ -68,9 +69,9 @@ class ConfigValidator:
     """Validates and helps recover SmallvilleSimulation configuration"""
 
     def __init__(self):
-        self.errors: List[str] = []
-        self.warnings: List[str] = []
-        self.fixes_applied: List[str] = []
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
+        self.fixes_applied: list[str] = []
 
     def run_all_checks(self, quiet: bool = False) -> bool:
         """Run all validation checks"""
@@ -118,7 +119,7 @@ class ConfigValidator:
             subprocess.run([sys.executable, "-m", "pip", "install", "pyyaml"],
                          capture_output=True, text=True)
             if "pyyaml" in dep_name:
-                self.fixes_applied.append(f"Installed pyyaml")
+                self.fixes_applied.append("Installed pyyaml")
                 if not quiet:
                     print("  ✓ Installed")
         except Exception as e:
@@ -168,7 +169,7 @@ class ConfigValidator:
             else:
                 self.warnings.append("Ollama API not reachable")
                 if not quiet:
-                    print(f"  ! Ollama API not reachable")
+                    print("  ! Ollama API not reachable")
 
         except Exception as e:
             self.warnings.append(f"Could not check models: {e}")
@@ -238,13 +239,13 @@ class ConfigValidator:
                 self.errors.append("OLLAMA_HOST not set")
                 self.fixes_applied.append("Defaulted OLLAMA_HOST to localhost:11434")
                 if not quiet:
-                    print(f"  ! Missing OLLAMA_HOST, defaulted to localhost:11434")
+                    print("  ! Missing OLLAMA_HOST, defaulted to localhost:11434")
 
             if "LLM_MODEL" not in env_vars:
                 self.errors.append("LLM_MODEL not set")
                 self.fixes_applied.append("Defaulted LLM_MODEL to qwen2.5:3b")
                 if not quiet:
-                    print(f"  ! Missing LLM_MODEL, defaulted to qwen2.5:3b")
+                    print("  ! Missing LLM_MODEL, defaulted to qwen2.5:3b")
 
             # Check for model in config but not in env
             config_models = [
@@ -316,14 +317,14 @@ class ConfigValidator:
                 f.write(f"Warnings: {len(self.warnings)}\n")
                 f.write(f"Fixes: {len(self.fixes_applied)}\n\n")
 
-                f.write(f"Errors:\n")
+                f.write("Errors:\n")
                 for error in self.errors:
                     f.write(f"  - {error}\n")
 
-                f.write(f"\nWarnings:\n")
+                f.write("\nWarnings:\n")
                 for warning in self.warnings:
                     f.write(f"  - {warning}\n")
 
-                f.write(f"\nFixes:\n")
+                f.write("\nFixes:\n")
                 for fix in self.fixes_applied:
                     f.write(f"  - {fix}\n")

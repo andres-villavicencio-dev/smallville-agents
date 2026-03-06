@@ -1,9 +1,10 @@
 """Smallville environment implementation."""
 import json
 import logging
-from typing import Dict, List, Set, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Dict, List, Optional, Set, Tuple
+
 from config import SMALLVILLE_LOCATIONS
 
 logger = logging.getLogger(__name__)
@@ -12,11 +13,11 @@ logger = logging.getLogger(__name__)
 class Location:
     """A location in Smallville."""
     name: str
-    sub_areas: List[str]
+    sub_areas: list[str]
     description: str = ""
     capacity: int = 10  # Maximum agents that can be here
-    current_agents: Set[str] = None
-    objects: List[str] = None
+    current_agents: set[str] = None
+    objects: list[str] = None
     
     def __post_init__(self):
         if self.current_agents is None:
@@ -28,10 +29,10 @@ class SmallvilleEnvironment:
     """The Smallville environment where agents live and interact."""
     
     def __init__(self):
-        self.locations: Dict[str, Location] = {}
-        self.agent_locations: Dict[str, str] = {}  # agent_name -> location_name
-        self.agent_sub_areas: Dict[str, str] = {}  # agent_name -> sub_area
-        self.location_connections: Dict[str, List[str]] = {}
+        self.locations: dict[str, Location] = {}
+        self.agent_locations: dict[str, str] = {}  # agent_name -> location_name
+        self.agent_sub_areas: dict[str, str] = {}  # agent_name -> sub_area
+        self.location_connections: dict[str, list[str]] = {}
         self._initialize_locations()
         self._initialize_connections()
     
@@ -97,7 +98,7 @@ class SmallvilleEnvironment:
             ]
     
     def move_agent(self, agent_name: str, destination: str, 
-                   sub_area: Optional[str] = None) -> bool:
+                   sub_area: str | None = None) -> bool:
         """Move an agent to a new location."""
         if destination not in self.locations:
             from planning_utils import snap_to_valid_location
@@ -138,14 +139,14 @@ class SmallvilleEnvironment:
                    (f" ({sub_area})" if sub_area else ""))
         return True
     
-    def get_agent_location(self, agent_name: str) -> Tuple[Optional[str], Optional[str]]:
+    def get_agent_location(self, agent_name: str) -> tuple[str | None, str | None]:
         """Get an agent's current location and sub-area."""
         location = self.agent_locations.get(agent_name)
         sub_area = self.agent_sub_areas.get(agent_name)
         return location, sub_area
     
     def get_agents_at_location(self, location_name: str, 
-                              sub_area: Optional[str] = None) -> List[str]:
+                              sub_area: str | None = None) -> list[str]:
         """Get all agents at a specific location (and optionally sub-area)."""
         if location_name not in self.locations:
             return []
@@ -161,7 +162,7 @@ class SmallvilleEnvironment:
         
         return agents
     
-    def get_nearby_agents(self, agent_name: str) -> List[str]:
+    def get_nearby_agents(self, agent_name: str) -> list[str]:
         """Get agents in the same location and sub-area."""
         location, sub_area = self.get_agent_location(agent_name)
         if not location:
@@ -244,17 +245,17 @@ class SmallvilleEnvironment:
         
         return description
     
-    def get_available_locations(self) -> List[str]:
+    def get_available_locations(self) -> list[str]:
         """Get list of all available locations."""
         return list(self.locations.keys())
     
-    def get_sub_areas(self, location_name: str) -> List[str]:
+    def get_sub_areas(self, location_name: str) -> list[str]:
         """Get sub-areas for a location."""
         if location_name not in self.locations:
             return []
         return self.locations[location_name].sub_areas.copy()
     
-    def observe_environment(self, agent_name: str) -> List[str]:
+    def observe_environment(self, agent_name: str) -> list[str]:
         """Generate observations for an agent based on their environment."""
         observations = []
         location, sub_area = self.get_agent_location(agent_name)
@@ -278,7 +279,7 @@ class SmallvilleEnvironment:
         
         return observations
     
-    def get_environment_state(self) -> Dict:
+    def get_environment_state(self) -> dict:
         """Get the current state of the environment."""
         state = {
             "locations": {},
@@ -296,7 +297,7 @@ class SmallvilleEnvironment:
         
         return state
     
-    def load_environment_state(self, state: Dict):
+    def load_environment_state(self, state: dict):
         """Load environment state."""
         self.agent_locations = state.get("agent_locations", {})
         self.agent_sub_areas = state.get("agent_sub_areas", {})

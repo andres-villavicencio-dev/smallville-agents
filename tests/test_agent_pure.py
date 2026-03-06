@@ -1,10 +1,13 @@
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import pytest
 from datetime import datetime, timedelta
-from agent import PlanItem, GenerativeAgent
 
+import pytest
+
+from agent import GenerativeAgent, PlanItem
 
 # ============================================================================
 # A. PlanItem Tests (5 tests)

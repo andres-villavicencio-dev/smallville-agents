@@ -14,15 +14,16 @@ Skills are distilled from:
   - Reflections → cognitive/emotional skills
   - Plan outcomes → planning/spatial skills
 """
-import sqlite3
 import json
 import logging
+import sqlite3
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple, Any
-from dataclasses import dataclass, asdict
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Skill:
     """A distilled, reusable behavioral pattern."""
-    id: Optional[int] = None
+    id: int | None = None
     agent_name: str = ""
     name: str = ""                    # Short label, e.g. "active listening"
     principle: str = ""               # What the skill teaches
@@ -60,9 +61,9 @@ class SkillBank:
         self.db_path = db_path
         self.vectorizer = TfidfVectorizer(max_features=500, stop_words='english')
         self._skill_vectors = None
-        self._skill_texts: List[str] = []
-        self._skill_ids: List[int] = []
-        self._effectiveness_cache: Dict[int, float] = {}  # Cache for effectiveness scores
+        self._skill_texts: list[str] = []
+        self._skill_ids: list[int] = []
+        self._effectiveness_cache: dict[int, float] = {}  # Cache for effectiveness scores
         self._init_tables()
         self._rebuild_vectors()
 
@@ -130,9 +131,9 @@ class SkillBank:
             logger.error(f"Error adding skill: {e}")
             return -1
 
-    def get_skills(self, category: Optional[str] = None,
-                   level: Optional[str] = None,
-                   limit: int = 50) -> List[Skill]:
+    def get_skills(self, category: str | None = None,
+                   level: str | None = None,
+                   limit: int = 50) -> list[Skill]:
         """Retrieve skills with optional filters."""
         try:
             with sqlite3.connect(self.db_path, timeout=30) as conn:
@@ -154,7 +155,7 @@ class SkillBank:
             logger.error(f"Error getting skills: {e}")
             return []
 
-    def retrieve_relevant_skills(self, context: str, top_k: int = 5) -> List[Skill]:
+    def retrieve_relevant_skills(self, context: str, top_k: int = 5) -> list[Skill]:
         """Retrieve the most relevant skills for a given context using TF-IDF similarity."""
         if self._skill_vectors is None or not self._skill_texts:
             return self.get_skills(limit=top_k)  # Fallback: top by effectiveness
@@ -235,7 +236,7 @@ class SkillBank:
         )
         self.add_skill(failure_skill)
 
-    def format_skills_for_prompt(self, skills: List[Skill]) -> str:
+    def format_skills_for_prompt(self, skills: list[Skill]) -> str:
         """Format retrieved skills as context for LLM prompts."""
         if not skills:
             return ""
@@ -247,7 +248,7 @@ class SkillBank:
                 lines.append(f"    When: {s.when_to_apply}")
         return "\n".join(lines)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Summary statistics for display / logging."""
         try:
             with sqlite3.connect(self.db_path, timeout=30) as conn:
@@ -310,7 +311,7 @@ class SkillBank:
             source_description=row[13],
         )
 
-    def _get_skill_by_id(self, skill_id: int) -> Optional[Skill]:
+    def _get_skill_by_id(self, skill_id: int) -> Skill | None:
         try:
             with sqlite3.connect(self.db_path, timeout=30) as conn:
                 cursor = conn.cursor()
@@ -346,7 +347,7 @@ class SkillBank:
         """Get effectiveness from cache (no DB query)."""
         return self._effectiveness_cache.get(skill_id, 0.5)
 
-    def _batch_get_skills_by_ids(self, skill_ids: List[int]) -> List[Skill]:
+    def _batch_get_skills_by_ids(self, skill_ids: list[int]) -> list[Skill]:
         """Fetch multiple skills by ID in a single query."""
         if not skill_ids:
             return []
@@ -365,7 +366,7 @@ class SkillBank:
             logger.error(f"Error batch getting skills: {e}")
             return []
 
-    def _batch_increment_use_counts(self, skill_ids: List[int]):
+    def _batch_increment_use_counts(self, skill_ids: list[int]):
         """Increment use counts for multiple skills in a single query."""
         if not skill_ids:
             return
@@ -389,7 +390,7 @@ async def distill_conversation_skill(
     conversation_text: str,
     outcome: str,  # "success" or "failure"
     location: str = "",
-) -> Optional[Skill]:
+) -> Skill | None:
     """Distill a conversation into a reusable social skill.
 
     Uses the committee's judge model for distillation.
@@ -425,7 +426,7 @@ async def distill_reflection_skill(
     agent_name: str,
     reflection_text: str,
     context: str = "",
-) -> Optional[Skill]:
+) -> Skill | None:
     """Distill a reflection into a cognitive/emotional skill."""
     from llm import get_llm_client
 
@@ -453,7 +454,7 @@ CATEGORY: <emotional|cognitive|planning|social>"""
 def _parse_skill_response(
     response: str, agent_name: str, source_type: str,
     success: bool, source_desc: str
-) -> Optional[Skill]:
+) -> Skill | None:
     """Parse the structured LLM response into a Skill object."""
     try:
         lines = response.strip().split("\n")

@@ -4,16 +4,16 @@ Uses sentence-transformers for embeddings and Qdrant for vector search,
 with recency/importance re-scoring to match the original paper's retrieval formula.
 """
 
+import json
+import logging
+import math
 import os
 import sqlite3
-import json
-import math
-import logging
 from datetime import datetime
 from typing import List, Optional, Tuple
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, PointStruct, VectorParams
 from sentence_transformers import SentenceTransformer
 
 from config import MEMORY_RETRIEVAL_WEIGHTS, RECENCY_DECAY_FACTOR
@@ -141,8 +141,8 @@ class QdrantMemoryStream:
         self,
         query: str,
         top_k: int = 5,
-        current_time: Optional[datetime] = None
-    ) -> List[Tuple[Memory, float]]:
+        current_time: datetime | None = None
+    ) -> list[tuple[Memory, float]]:
         """Retrieve top-k most relevant memories using semantic search + re-scoring.
 
         Uses Qdrant for initial semantic retrieval, then re-scores results using
@@ -291,7 +291,7 @@ class QdrantMemoryStream:
             logger.error(f"Error syncing from SQLite: {e}")
             raise
 
-    def get_all_memories(self) -> List[Memory]:
+    def get_all_memories(self) -> list[Memory]:
         """Get all memories in the collection."""
         collection_info = self.client.get_collection(self.collection_name)
         if collection_info.points_count == 0:
@@ -307,8 +307,8 @@ class QdrantMemoryStream:
 
         return [self._payload_to_memory(r.id, r.payload) for r in results]
 
-    def get_memories(self, limit: Optional[int] = None,
-                     memory_type: Optional[str] = None) -> List[Memory]:
+    def get_memories(self, limit: int | None = None,
+                     memory_type: str | None = None) -> list[Memory]:
         """Get memories for the agent, optionally filtered by type.
 
         Mirrors MemoryStream.get_memories() interface for drop-in compatibility.
@@ -318,7 +318,7 @@ class QdrantMemoryStream:
         if collection_info.points_count == 0:
             return []
 
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
 
         scroll_filter = None
         if memory_type:

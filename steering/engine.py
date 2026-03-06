@@ -6,13 +6,14 @@ using RFM concept vectors from neural_controllers to steer per agent personality
 """
 
 import asyncio
+import logging
 import os
 import sys
-import torch
-import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Dict, Optional
-from concurrent.futures import ThreadPoolExecutor
+
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +33,10 @@ class SteeringEngine:
         self.model = None
         self.tokenizer = None
         self.controller = None
-        self.concept_directions: Dict[str, dict] = {}  # concept_name -> directions dict
+        self.concept_directions: dict[str, dict] = {}  # concept_name -> directions dict
         self._loaded = False
         self._executor = ThreadPoolExecutor(max_workers=1)
-        self._composite_cache: Dict[str, dict] = {}  # "agent|role" -> composite directions
+        self._composite_cache: dict[str, dict] = {}  # "agent|role" -> composite directions
         self._vram_reservation_id = None  # GPU queue v2 reservation
 
         logger.info(f"SteeringEngine initialized (model={MODEL_ID}, 4bit={load_in_4bit})")
@@ -45,7 +46,7 @@ class SteeringEngine:
         if self._loaded:
             return
 
-        from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+        from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
         logger.info(f"Loading {MODEL_ID} in 4-bit...")
         quantization_config = BitsAndBytesConfig(
@@ -82,8 +83,9 @@ class SteeringEngine:
         # Use nvidia-smi for actual VRAM (PyTorch undercounts by ~2x due to CUDA context)
         try:
             sys.path.insert(0, "/home/andus/.openclaw/workspace/gpu-queue")
-            from queue_manager_v2 import gpu_reserve
             import subprocess
+
+            from queue_manager_v2 import gpu_reserve
             result = subprocess.run(
                 ["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
                 capture_output=True, text=True, timeout=5
@@ -137,7 +139,7 @@ class SteeringEngine:
         self,
         prompt: str,
         agent_name: str = "",
-        agent_concepts: Optional[Dict[str, float]] = None,
+        agent_concepts: dict[str, float] | None = None,
         pipeline_role: str = "",
         max_new_tokens: int = 1024,
         temperature: float = 0.7,
@@ -217,7 +219,7 @@ class SteeringEngine:
         text = re.sub(r'<think>.*?</think>\s*', '', text, flags=re.DOTALL)
         # Handle unclosed blocks (if max_new_tokens hit mid-thought) - remove everything
         if '<think>' in text:
-            logger.warning(f"Unclosed <think> block detected — output truncated mid-thought. Increase max_new_tokens.")
+            logger.warning("Unclosed <think> block detected — output truncated mid-thought. Increase max_new_tokens.")
             text = re.sub(r'<think>.*', '', text, flags=re.DOTALL)
         
         result = text.strip()
@@ -241,7 +243,7 @@ class SteeringEngine:
         )
         return self._decode_new_tokens(input_ids, outputs)
 
-    def _get_composite_directions(self, agent_concepts: Dict[str, float], cache_key: str = "") -> dict:
+    def _get_composite_directions(self, agent_concepts: dict[str, float], cache_key: str = "") -> dict:
         """Compute or retrieve cached composite directions for a concept mix."""
         if cache_key and cache_key in self._composite_cache:
             return self._composite_cache[cache_key]
@@ -273,7 +275,7 @@ class SteeringEngine:
     def _generate_steered(
         self,
         prompt: str,
-        agent_concepts: Dict[str, float],
+        agent_concepts: dict[str, float],
         max_new_tokens: int,
         temperature: float,
         cache_key: str = "",
@@ -283,7 +285,7 @@ class SteeringEngine:
         if "Qwen" in MODEL_ID and 100 <= max_new_tokens < 1024:
             max_new_tokens = 2048
 
-        from generation_utils import hook_model, clear_hooks
+        from generation_utils import clear_hooks, hook_model
 
         composite_directions = self._get_composite_directions(agent_concepts, cache_key)
 

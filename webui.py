@@ -18,8 +18,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Set
 
-from aiohttp import web
 import aiohttp
+from aiohttp import web
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class SmallvilleWebUI:
         self.app = web.Application()
         self.runner: web.AppRunner | None = None
         self.site: web.TCPSite | None = None
-        self.ws_clients: Set[web.WebSocketResponse] = set()
+        self.ws_clients: set[web.WebSocketResponse] = set()
 
     # ------------------------------------------------------------------
     # Lifecycle

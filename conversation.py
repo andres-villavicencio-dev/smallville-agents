@@ -1,23 +1,25 @@
 """Conversation system for generative agents."""
-import logging
 import asyncio
-from typing import List, Dict, Optional, Tuple
+import logging
 from dataclasses import dataclass
 from datetime import datetime
-from memory import Memory, MemoryStream
-from skillbank import SkillBank, distill_conversation_skill
-from llm import get_llm_client
-from personas import get_agent_persona, format_agent_description
+from typing import Dict, List, Optional, Tuple
+
 import config as cfg
+from llm import get_llm_client
+from memory import Memory, MemoryStream
+from personas import format_agent_description, get_agent_persona
+from skillbank import SkillBank, distill_conversation_skill
+
 try:
     from voice_integration import voice_conversation_end
 except ImportError:
     voice_conversation_end = None
 from prompts import (
+    CONVERSATION_ENDING_PROMPT,
     CONVERSATION_INITIATION_PROMPT,
     CONVERSATION_RESPONSE_PROMPT,
     CONVERSATION_TOPIC_PROMPT,
-    CONVERSATION_ENDING_PROMPT
 )
 from reflection_engine import ConversationEngine
 
@@ -37,7 +39,7 @@ class Conversation:
         self.agent1 = agent1
         self.agent2 = agent2
         self.location = location
-        self.turns: List[ConversationTurn] = []
+        self.turns: list[ConversationTurn] = []
         self.start_time = datetime.now()
         self.active = True
         self.max_turns = 8
@@ -63,7 +65,7 @@ class Conversation:
         """Check if conversation should end."""
         return len(self.turns) >= self.max_turns or not self.active
     
-    def get_participants(self) -> Tuple[str, str]:
+    def get_participants(self) -> tuple[str, str]:
         """Get the two participants."""
         return self.agent1, self.agent2
 
@@ -71,10 +73,10 @@ class ConversationManager:
     """Manages conversations between agents."""
     
     def __init__(self):
-        self.active_conversations: Dict[Tuple[str, str], Conversation] = {}
-        self.conversation_history: List[Conversation] = []
+        self.active_conversations: dict[tuple[str, str], Conversation] = {}
+        self.conversation_history: list[Conversation] = []
     
-    def get_conversation_key(self, agent1: str, agent2: str) -> Tuple[str, str]:
+    def get_conversation_key(self, agent1: str, agent2: str) -> tuple[str, str]:
         """Get a consistent key for agent pair."""
         return tuple(sorted([agent1, agent2]))
     
@@ -95,7 +97,7 @@ class ConversationManager:
         """Number of currently active conversations."""
         return len(self.active_conversations)
     
-    def get_active_conversation(self, agent1: str, agent2: str) -> Optional[Conversation]:
+    def get_active_conversation(self, agent1: str, agent2: str) -> Conversation | None:
         """Get active conversation between agents."""
         key = self.get_conversation_key(agent1, agent2)
         return self.active_conversations.get(key)
@@ -126,7 +128,7 @@ class ConversationManager:
             return False
     
     async def start_conversation(self, agent1: str, agent2: str, 
-                               location: str, memory_streams: Dict[str, MemoryStream]) -> Optional[Conversation]:
+                               location: str, memory_streams: dict[str, MemoryStream]) -> Conversation | None:
         """Start a new conversation between two agents."""
         key = self.get_conversation_key(agent1, agent2)
         
@@ -197,7 +199,7 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
             return f"Hello {target}!"
     
     async def continue_conversation(self, conversation: Conversation, 
-                                  memory_streams: Dict[str, MemoryStream]) -> bool:
+                                  memory_streams: dict[str, MemoryStream]) -> bool:
         """Continue an active conversation with the next turn."""
         if not conversation.active or conversation.should_end():
             return False
@@ -258,9 +260,9 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
         return len(conversation.turns) >= cfg.MAX_CONVERSATION_TURNS
     
     async def end_conversation(self, conversation: Conversation,
-                              memory_streams: Dict[str, MemoryStream],
-                              skill_banks: Optional[Dict[str, SkillBank]] = None,
-                              agents: Optional[Dict] = None,
+                              memory_streams: dict[str, MemoryStream],
+                              skill_banks: dict[str, SkillBank] | None = None,
+                              agents: dict | None = None,
                               current_time=None):
         """End an active conversation, distill skills, and trigger re-planning."""
         conversation.active = False
@@ -338,9 +340,9 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
         )
         memory_stream.add_memory(memory)
     
-    async def update_conversations(self, memory_streams: Dict[str, MemoryStream],
-                                   skill_banks: Optional[Dict[str, SkillBank]] = None,
-                                   agents: Optional[Dict] = None,
+    async def update_conversations(self, memory_streams: dict[str, MemoryStream],
+                                   skill_banks: dict[str, SkillBank] | None = None,
+                                   agents: dict | None = None,
                                    current_time=None,
                                    current_tick: int = 0):
         """Update all active conversations."""
@@ -360,7 +362,7 @@ Generate a natural, brief opening message (1-2 sentences) that {speaker} would s
             await self.end_conversation(conversation, memory_streams, skill_banks, 
                                        agents=agents, current_time=current_time)
     
-    def get_active_conversations_summary(self) -> List[str]:
+    def get_active_conversations_summary(self) -> list[str]:
         """Get summary of all active conversations."""
         summaries = []
         for conversation in self.active_conversations.values():

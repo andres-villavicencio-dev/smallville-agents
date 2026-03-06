@@ -1,5 +1,5 @@
 """Persona definitions for the 25 generative agents."""
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 AGENT_PERSONAS = {
     "John Lin": {
@@ -484,15 +484,15 @@ AGENT_PERSONAS = {
     }
 }
 
-def get_agent_persona(agent_name: str) -> Dict[str, Any]:
+def get_agent_persona(agent_name: str) -> dict[str, Any]:
     """Get persona information for an agent."""
     return AGENT_PERSONAS.get(agent_name, {})
 
-def get_all_agent_names() -> List[str]:
+def get_all_agent_names() -> list[str]:
     """Get list of all agent names."""
     return list(AGENT_PERSONAS.keys())
 
-def select_agent_subset(n: int) -> List[str]:
+def select_agent_subset(n: int) -> list[str]:
     """Select the first N agents from AGENT_PERSONAS.
 
     Args:
@@ -504,7 +504,7 @@ def select_agent_subset(n: int) -> List[str]:
     n = max(5, min(n, len(all_names)))
     return all_names[:n]
 
-def get_agents_by_location(location: str) -> List[str]:
+def get_agents_by_location(location: str) -> list[str]:
     """Get agents who live or work at a specific location."""
     agents = []
     for name, persona in AGENT_PERSONAS.items():
@@ -513,12 +513,12 @@ def get_agents_by_location(location: str) -> List[str]:
             agents.append(name)
     return agents
 
-def get_agent_relationships(agent_name: str) -> Dict[str, str]:
+def get_agent_relationships(agent_name: str) -> dict[str, str]:
     """Get an agent's relationships."""
     persona = AGENT_PERSONAS.get(agent_name, {})
     return persona.get("relationships", {})
 
-def get_related_agents(agent_name: str) -> List[str]:
+def get_related_agents(agent_name: str) -> list[str]:
     """Get list of agents related to this agent."""
     relationships = get_agent_relationships(agent_name)
     return list(relationships.keys())
